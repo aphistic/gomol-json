@@ -539,7 +539,7 @@ func (s *GomolSuite) TestQueueFailure(c *C) {
 	c.Check(len(l.failedQueue), Equals, 2)
 	l.queueFailure([]byte{0x02})
 	c.Check(len(l.failedQueue), Equals, 2)
-	c.Check(l.failedQueue, DeepEquals, [][]byte{[]byte{0x01}, []byte{0x02}})
+	c.Check(l.failedQueue, DeepEquals, [][]byte{{0x01}, {0x02}})
 }
 
 func (s *GomolSuite) TestFailureLen(c *C) {
@@ -571,12 +571,12 @@ func (s *GomolSuite) TestDequeueFailure(c *C) {
 	item := l.dequeueFailure()
 	c.Check(item, DeepEquals, []byte{0x00})
 	c.Check(len(l.failedQueue), Equals, 2)
-	c.Check(l.failedQueue, DeepEquals, [][]byte{[]byte{0x01}, []byte{0x02}})
+	c.Check(l.failedQueue, DeepEquals, [][]byte{{0x01}, {0x02}})
 
 	item = l.dequeueFailure()
 	c.Check(item, DeepEquals, []byte{0x01})
 	c.Check(len(l.failedQueue), Equals, 1)
-	c.Check(l.failedQueue, DeepEquals, [][]byte{[]byte{0x02}})
+	c.Check(l.failedQueue, DeepEquals, [][]byte{{0x02}})
 
 	item = l.dequeueFailure()
 	c.Check(item, DeepEquals, []byte{0x02})
