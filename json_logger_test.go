@@ -421,7 +421,7 @@ func (s *GomolSuite) TestLogmMarshalJsonError(c *C) {
 			2: 3,
 		},
 	}, "test")
-	c.Check(err, NotNil)
+	c.Assert(err, NotNil)
 	c.Check(err.Error(), Equals, "json: unsupported type: map[int]int")
 }
 func (s *GomolSuite) TestLogmWrite(c *C) {
