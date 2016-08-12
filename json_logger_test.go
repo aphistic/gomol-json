@@ -16,7 +16,8 @@ func Test(t *testing.T) { TestingT(t) }
 type GomolSuite struct{}
 
 func (s *GomolSuite) SetUpTest(c *C) {
-	netDial = fakeDial
+	fd := newFakeDialer()
+	netDial = fd.Dial
 }
 
 var _ = Suite(&GomolSuite{})
@@ -74,7 +75,9 @@ func (s *GomolSuite) TestInitializeInvalidHostURI(c *C) {
 }
 
 func (s *GomolSuite) TestInitializeConnectFailure(c *C) {
-	netDial = fakeDialError
+	fd := newFakeDialer()
+	fd.DialError = errors.New("Dial error")
+	netDial = fd.Dial
 
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
 	l, _ := NewJSONLogger(cfg)
@@ -83,6 +86,18 @@ func (s *GomolSuite) TestInitializeConnectFailure(c *C) {
 	err := l.InitLogger()
 	c.Assert(err, NotNil)
 	c.Check(err.Error(), Equals, "Dial error")
+}
+
+func (s *GomolSuite) TestConnectWithExistingConnection(c *C) {
+	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
+	l, _ := NewJSONLogger(cfg)
+
+	l.InitLogger()
+
+	conn := l.conn.(*fakeConn)
+	l.connect()
+	c.Check(conn, Not(Equals), l.conn)
+	c.Check(conn.HasClosed, Equals, true)
 }
 
 func (s *GomolSuite) TestShutdown(c *C) {
@@ -424,6 +439,23 @@ func (s *GomolSuite) TestLogmWrite(c *C) {
 		"\"timestamp\":\"2016-08-11T10:56:33Z\""+
 		"}\n"))
 }
+func (s *GomolSuite) TestLogmWritePartial(c *C) {
+	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	l, err := NewJSONLogger(cfg)
+	l.InitLogger()
+
+	conn := l.conn.(*fakeConn)
+	conn.WriteWindowSize = 10
+
+	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
+	err = l.Logm(ts, gomol.LEVEL_DEBUG, nil, "test")
+	c.Check(err, IsNil)
+	c.Check(conn.Written, DeepEquals, []byte("{"+
+		"\"level\":\"debug\","+
+		"\"message\":\"test\","+
+		"\"timestamp\":\"2016-08-11T10:56:33Z\""+
+		"}\n"))
+}
 func (s *GomolSuite) TestLogmWriteCustomDelimiter(c *C) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.MessageDelimiter = []byte("DELIMITER")
@@ -440,10 +472,201 @@ func (s *GomolSuite) TestLogmWriteCustomDelimiter(c *C) {
 		"\"timestamp\":\"2016-08-11T10:56:33Z\""+
 		"}DELIMITER"))
 }
+func (s *GomolSuite) TestLogmErrorWhenAlreadyDisconnected(c *C) {
+	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	l, err := NewJSONLogger(cfg)
+	l.InitLogger()
 
-// ====================
-// Fake connection impl
-// ====================
+	l.disconnect()
+
+	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
+	err = l.Logm(ts, gomol.LEVEL_DEBUG, nil, "test")
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, "Could not send message")
+
+	c.Assert(len(l.failedQueue), Equals, 1)
+	c.Check(l.failedQueue[0], DeepEquals, []byte("{"+
+		"\"level\":\"debug\","+
+		"\"message\":\"test\","+
+		"\"timestamp\":\"2016-08-11T10:56:33Z\""+
+		"}\n"))
+}
+func (s *GomolSuite) TestLogmErrorWhenNewlyDisconnected(c *C) {
+	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	l, err := NewJSONLogger(cfg)
+	l.InitLogger()
+
+	conn := l.conn.(*fakeConn)
+	conn.WriteError = newFakeNetError("disconnected", false, false)
+
+	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
+	err = l.Logm(ts, gomol.LEVEL_DEBUG, nil, "test")
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, "Could not send message")
+
+	c.Assert(len(l.failedQueue), Equals, 1)
+	c.Check(l.failedQueue[0], DeepEquals, []byte("{"+
+		"\"level\":\"debug\","+
+		"\"message\":\"test\","+
+		"\"timestamp\":\"2016-08-11T10:56:33Z\""+
+		"}\n"))
+}
+func (s *GomolSuite) TestLogmErrorOnWriteButNotDisconnected(c *C) {
+	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	l, err := NewJSONLogger(cfg)
+	l.InitLogger()
+
+	conn := l.conn.(*fakeConn)
+	conn.WriteError = errors.New("write error")
+
+	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
+	err = l.Logm(ts, gomol.LEVEL_DEBUG, nil, "test")
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, "write error")
+}
+
+func (s *GomolSuite) TestQueueFailure(c *C) {
+	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg.FailureQueueLength = 2
+	l, _ := NewJSONLogger(cfg)
+	l.InitLogger()
+
+	c.Assert(l.failedQueue, NotNil)
+	c.Check(len(l.failedQueue), Equals, 0)
+	l.queueFailure([]byte{0x00})
+	c.Check(len(l.failedQueue), Equals, 1)
+	l.queueFailure([]byte{0x01})
+	c.Check(len(l.failedQueue), Equals, 2)
+	l.queueFailure([]byte{0x02})
+	c.Check(len(l.failedQueue), Equals, 2)
+	c.Check(l.failedQueue, DeepEquals, [][]byte{[]byte{0x01}, []byte{0x02}})
+}
+
+func (s *GomolSuite) TestFailureLen(c *C) {
+	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg.FailureQueueLength = 2
+	l, _ := NewJSONLogger(cfg)
+	l.InitLogger()
+
+	c.Check(l.failureLen(), Equals, 0)
+	l.queueFailure([]byte{0x00})
+	c.Check(l.failureLen(), Equals, 1)
+	l.queueFailure([]byte{0x01})
+	c.Check(l.failureLen(), Equals, 2)
+	l.queueFailure([]byte{0x02})
+	c.Check(l.failureLen(), Equals, 2)
+}
+
+func (s *GomolSuite) TestDequeueFailure(c *C) {
+	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	l, _ := NewJSONLogger(cfg)
+	l.InitLogger()
+
+	c.Assert(l.failedQueue, NotNil)
+
+	l.queueFailure([]byte{0x00})
+	l.queueFailure([]byte{0x01})
+	l.queueFailure([]byte{0x02})
+
+	item := l.dequeueFailure()
+	c.Check(item, DeepEquals, []byte{0x00})
+	c.Check(len(l.failedQueue), Equals, 2)
+	c.Check(l.failedQueue, DeepEquals, [][]byte{[]byte{0x01}, []byte{0x02}})
+
+	item = l.dequeueFailure()
+	c.Check(item, DeepEquals, []byte{0x01})
+	c.Check(len(l.failedQueue), Equals, 1)
+	c.Check(l.failedQueue, DeepEquals, [][]byte{[]byte{0x02}})
+
+	item = l.dequeueFailure()
+	c.Check(item, DeepEquals, []byte{0x02})
+	c.Check(len(l.failedQueue), Equals, 0)
+	c.Check(l.failedQueue, DeepEquals, [][]byte{})
+
+	item = l.dequeueFailure()
+	c.Check(item, IsNil)
+}
+
+func (s *GomolSuite) TestTryReconnect(c *C) {
+	fd := newFakeDialer()
+	fd.DialError = errors.New("dial error")
+	fd.DialErrorOn = 2
+	netDial = fd.Dial
+
+	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	testBackoff := &fakeBackoff{}
+	cfg.ReconnectBackoff = testBackoff
+	l, _ := NewJSONLogger(cfg)
+	l.InitLogger()
+
+	rcChan := make(chan bool, 1)
+
+	l.tryReconnect(rcChan)
+
+	c.Check(testBackoff.NextCalledCount, Equals, 1)
+	c.Check(testBackoff.ResetCalledCount, Equals, 1)
+
+	select {
+	case chanRes := <-rcChan:
+		c.Check(chanRes, Equals, true)
+	default:
+		c.Fail()
+	}
+}
+
+func (s *GomolSuite) TestTrySendFailures(c *C) {
+	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	l, _ := NewJSONLogger(cfg)
+	l.InitLogger()
+
+	conn := l.conn.(*fakeConn)
+	conn.WriteError = newFakeNetError("net err", false, false)
+	conn.WriteErrorOn = 1
+	conn.WriteSuccessAfterError = true
+
+	rcChan := make(chan bool, 1)
+	rcChan <- true
+
+	l.queueFailure([]byte{0x00})
+	l.queueFailure([]byte{0x01})
+
+	l.trySendFailures(rcChan)
+
+	// Super terrible way to do this but it needs to wait for a reconnect
+	// to happen before checking the data written
+	loops := 0
+	for {
+		if l.failureLen() == 0 {
+			break
+		}
+		loops++
+		if loops > 50 {
+			// Failsafe for if things don't work
+			break
+		}
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	conn = l.conn.(*fakeConn)
+	c.Check(conn.Written, DeepEquals, []byte{0x01, 0x00})
+}
+
+// ======================
+// Fake impls for testing
+// ======================
+
+func (s *GomolSuite) TestFakeDialerErrorOn(c *C) {
+	fd := newFakeDialer()
+	fd.DialError = errors.New("Dial error")
+	fd.DialErrorOn = 2
+
+	_, err := fd.Dial("tcp", "10.10.10.10:1234")
+	c.Check(err, IsNil)
+
+	_, err = fd.Dial("tcp", "10.10.10.10:1234")
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, "Dial error")
+}
 
 func (s *GomolSuite) TestFakeConn(c *C) {
 	f := newFakeConn("tcp", "1.2.3.4:4321")
@@ -465,12 +688,109 @@ func (s *GomolSuite) TestFakeConn(c *C) {
 	})
 }
 
-func fakeDialError(network string, address string) (net.Conn, error) {
-	return nil, errors.New("Dial error")
+func (s *GomolSuite) TestFakeConnWriteWindowSize(c *C) {
+	f := newFakeConn("tcp", "1.2.3.4:4321")
+	c.Assert(f.Written, NotNil)
+	c.Check(f.Written, HasLen, 0)
+
+	f.WriteWindowSize = 2
+
+	amt, err := f.Write([]byte{0, 1, 2, 3, 4})
+	c.Check(err, IsNil)
+	c.Check(amt, Equals, 2)
+	c.Check(f.Written, DeepEquals, []byte{0, 1})
 }
 
-func fakeDial(network string, address string) (net.Conn, error) {
+func (s *GomolSuite) TestFakeConnWriteError(c *C) {
+	f := newFakeConn("tcp", "1.2.3.4:4321")
+	c.Assert(f.Written, NotNil)
+	c.Check(f.Written, HasLen, 0)
+
+	f.WriteError = errors.New("write error")
+
+	_, err := f.Write([]byte{0, 1, 2, 3, 4})
+	c.Check(err, NotNil)
+	c.Check(err.Error(), Equals, "write error")
+}
+func (s *GomolSuite) TestFakeConnWriteErrorOn(c *C) {
+	f := newFakeConn("tcp", "1.2.3.4:4321")
+	c.Assert(f.Written, NotNil)
+	c.Check(f.Written, HasLen, 0)
+
+	f.WriteError = errors.New("write error")
+	f.WriteErrorOn = 2
+
+	_, err := f.Write([]byte{0, 1, 2, 3, 4})
+	c.Check(err, IsNil)
+
+	_, err = f.Write([]byte{0, 1, 2, 3, 4})
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, "write error")
+}
+func (s *GomolSuite) TestFakeConnWriteSuccessAfterError(c *C) {
+	f := newFakeConn("tcp", "1.2.3.4:4321")
+	c.Assert(f.Written, NotNil)
+	c.Check(f.Written, HasLen, 0)
+
+	f.WriteError = errors.New("write error")
+	f.WriteSuccessAfterError = true
+
+	_, err := f.Write([]byte{0, 1, 2, 3, 4})
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, "write error")
+
+	_, err = f.Write([]byte{0, 1, 2, 3, 4})
+	c.Check(err, IsNil)
+}
+
+func (s *GomolSuite) TestFakeBackoff(c *C) {
+	b := &fakeBackoff{}
+
+	b.Reset()
+	b.Reset()
+	c.Check(b.ResetCalledCount, Equals, 2)
+
+	b.NextInterval()
+	b.NextInterval()
+	b.NextInterval()
+	c.Check(b.NextCalledCount, Equals, 3)
+}
+
+type fakeDialer struct {
+	DialError   error
+	DialErrorOn int
+
+	dialsSinceError int
+}
+
+func newFakeDialer() *fakeDialer {
+	return &fakeDialer{}
+}
+
+func (d *fakeDialer) Dial(network string, address string) (net.Conn, error) {
+	if d.DialError != nil {
+		d.dialsSinceError++
+		if d.dialsSinceError >= d.DialErrorOn {
+			d.dialsSinceError = 0
+			return nil, d.DialError
+		}
+	}
+
 	return newFakeConn(network, address), nil
+}
+
+type fakeBackoff struct {
+	NextCalledCount  int
+	ResetCalledCount int
+}
+
+func (b *fakeBackoff) Reset() {
+	b.ResetCalledCount++
+}
+
+func (b *fakeBackoff) NextInterval() time.Duration {
+	b.NextCalledCount++
+	return time.Millisecond * 0
 }
 
 type fakeAddr struct {
@@ -478,19 +798,50 @@ type fakeAddr struct {
 	Address     string
 }
 
-func (c *fakeAddr) Network() string {
-	return c.AddrNetwork
+func (a *fakeAddr) Network() string {
+	return a.AddrNetwork
 }
-func (c *fakeAddr) String() string {
-	return c.Address
+func (a *fakeAddr) String() string {
+	return a.Address
+}
+
+type fakeNetError struct {
+	ErrMsg       string
+	ErrTimeout   bool
+	ErrTemporary bool
+}
+
+func newFakeNetError(msg string, timeout bool, temporary bool) *fakeNetError {
+	return &fakeNetError{
+		ErrMsg:       msg,
+		ErrTimeout:   timeout,
+		ErrTemporary: temporary,
+	}
+}
+
+func (e *fakeNetError) Timeout() bool {
+	return e.ErrTimeout
+}
+func (e *fakeNetError) Temporary() bool {
+	return e.ErrTemporary
+}
+func (e *fakeNetError) Error() string {
+	return e.ErrMsg
 }
 
 type fakeConn struct {
-	Written   []byte
+	Written                []byte
+	WriteWindowSize        int
+	WriteError             error
+	WriteErrorOn           int // Number of writes to return the error after
+	WriteSuccessAfterError bool
+
 	HasClosed bool
 
 	localAddr  net.Addr
 	remoteAddr net.Addr
+
+	writesSinceError int
 }
 
 func newFakeConn(network string, address string) *fakeConn {
@@ -514,6 +865,25 @@ func (c *fakeConn) Read(b []byte) (n int, err error) {
 }
 
 func (c *fakeConn) Write(b []byte) (n int, err error) {
+	if c.WriteError != nil {
+		c.writesSinceError++
+		if c.writesSinceError >= c.WriteErrorOn {
+			c.writesSinceError = 0
+
+			n = 0
+			err = c.WriteError
+			if c.WriteSuccessAfterError {
+				c.WriteError = nil
+			}
+
+			return
+		}
+	}
+
+	if c.WriteWindowSize > 0 {
+		c.Written = append(c.Written, b[:c.WriteWindowSize]...)
+		return c.WriteWindowSize, nil
+	}
 	c.Written = append(c.Written, b...)
 	return len(b), nil
 }
