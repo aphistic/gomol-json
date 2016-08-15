@@ -96,13 +96,13 @@ func NewJSONLoggerConfig(hostURI string) *JSONLoggerConfig {
 		TimestampField: "timestamp",
 
 		LogLevelMap: map[gomol.LogLevel]interface{}{
-			gomol.LEVEL_UNKNOWN: gomol.LEVEL_UNKNOWN.String(),
-			gomol.LEVEL_DEBUG:   gomol.LEVEL_DEBUG.String(),
-			gomol.LEVEL_INFO:    gomol.LEVEL_INFO.String(),
-			gomol.LEVEL_WARNING: gomol.LEVEL_WARNING.String(),
-			gomol.LEVEL_ERROR:   gomol.LEVEL_ERROR.String(),
-			gomol.LEVEL_FATAL:   gomol.LEVEL_FATAL.String(),
-			gomol.LEVEL_NONE:    gomol.LEVEL_NONE.String(),
+			gomol.LevelUnknown: gomol.LevelUnknown.String(),
+			gomol.LevelDebug:   gomol.LevelDebug.String(),
+			gomol.LevelInfo:    gomol.LevelInfo.String(),
+			gomol.LevelWarning: gomol.LevelWarning.String(),
+			gomol.LevelError:   gomol.LevelError.String(),
+			gomol.LevelFatal:   gomol.LevelFatal.String(),
+			gomol.LevelNone:    gomol.LevelNone.String(),
 		},
 
 		JSONAttrs: make(map[string]interface{}),

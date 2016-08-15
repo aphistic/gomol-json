@@ -24,13 +24,13 @@ var _ = Suite(&GomolSuite{})
 
 func (s *GomolSuite) TestDefaultLogLevelMapping(c *C) {
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
-	c.Check(cfg.LogLevelMap[gomol.LEVEL_UNKNOWN], Equals, "unknown")
-	c.Check(cfg.LogLevelMap[gomol.LEVEL_DEBUG], Equals, "debug")
-	c.Check(cfg.LogLevelMap[gomol.LEVEL_INFO], Equals, "info")
-	c.Check(cfg.LogLevelMap[gomol.LEVEL_WARNING], Equals, "warn")
-	c.Check(cfg.LogLevelMap[gomol.LEVEL_ERROR], Equals, "error")
-	c.Check(cfg.LogLevelMap[gomol.LEVEL_FATAL], Equals, "fatal")
-	c.Check(cfg.LogLevelMap[gomol.LEVEL_NONE], Equals, "none")
+	c.Check(cfg.LogLevelMap[gomol.LevelUnknown], Equals, "unknown")
+	c.Check(cfg.LogLevelMap[gomol.LevelDebug], Equals, "debug")
+	c.Check(cfg.LogLevelMap[gomol.LevelInfo], Equals, "info")
+	c.Check(cfg.LogLevelMap[gomol.LevelWarning], Equals, "warn")
+	c.Check(cfg.LogLevelMap[gomol.LevelError], Equals, "error")
+	c.Check(cfg.LogLevelMap[gomol.LevelFatal], Equals, "fatal")
+	c.Check(cfg.LogLevelMap[gomol.LevelNone], Equals, "none")
 }
 
 func (s *GomolSuite) TestSetBase(c *C) {
@@ -121,7 +121,7 @@ func (s *GomolSuite) TestMarshalJsonDefault(c *C) {
 	c.Check(l.IsInitialized(), Equals, true)
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
-	b, err := l.marshalJSON(ts, gomol.LEVEL_ERROR, map[string]interface{}{
+	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
@@ -148,7 +148,7 @@ func (s *GomolSuite) TestMarshalJsonWithJsonAttrs(c *C) {
 	c.Check(l.IsInitialized(), Equals, true)
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
-	b, err := l.marshalJSON(ts, gomol.LEVEL_ERROR, map[string]interface{}{
+	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
@@ -181,7 +181,7 @@ func (s *GomolSuite) TestMarshalJsonMarshalError(c *C) {
 			2: 3,
 		},
 	}
-	_, err = l.marshalJSON(ts, gomol.LEVEL_ERROR, attrs, "my message")
+	_, err = l.marshalJSON(ts, gomol.LevelError, attrs, "my message")
 	c.Assert(err, NotNil)
 	c.Check(err.Error(), Equals, "json: unsupported type: map[int]int")
 }
@@ -201,7 +201,7 @@ func (s *GomolSuite) TestMarshalJsonFieldPrefix(c *C) {
 	c.Check(l.IsInitialized(), Equals, true)
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
-	b, err := l.marshalJSON(ts, gomol.LEVEL_ERROR, map[string]interface{}{
+	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
@@ -228,7 +228,7 @@ func (s *GomolSuite) TestMarshalJsonTimestampNoPrefix(c *C) {
 	c.Check(l.IsInitialized(), Equals, true)
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
-	b, err := l.marshalJSON(ts, gomol.LEVEL_ERROR, map[string]interface{}{
+	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
@@ -253,7 +253,7 @@ func (s *GomolSuite) TestMarshalJsonMessageNoPrefix(c *C) {
 	c.Check(l.IsInitialized(), Equals, true)
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
-	b, err := l.marshalJSON(ts, gomol.LEVEL_ERROR, map[string]interface{}{
+	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
@@ -278,7 +278,7 @@ func (s *GomolSuite) TestMarshalJsonLevelNoPrefix(c *C) {
 	c.Check(l.IsInitialized(), Equals, true)
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
-	b, err := l.marshalJSON(ts, gomol.LEVEL_ERROR, map[string]interface{}{
+	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
@@ -307,7 +307,7 @@ func (s *GomolSuite) TestMarshalJsonLevelNoJsonPrefix(c *C) {
 	c.Check(l.IsInitialized(), Equals, true)
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
-	b, err := l.marshalJSON(ts, gomol.LEVEL_ERROR, map[string]interface{}{
+	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
@@ -333,7 +333,7 @@ func (s *GomolSuite) TestMarshalJsonMissingLevelMapping(c *C) {
 	c.Check(l.IsInitialized(), Equals, true)
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
-	_, err = l.marshalJSON(ts, gomol.LEVEL_ERROR, map[string]interface{}{
+	_, err = l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
@@ -344,7 +344,7 @@ func (s *GomolSuite) TestMarshalJsonMissingLevelMapping(c *C) {
 func (s *GomolSuite) TestMarshalJsonStringLevelMapping(c *C) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.LogLevelMap = map[gomol.LogLevel]interface{}{
-		gomol.LEVEL_ERROR: "e",
+		gomol.LevelError: "e",
 	}
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
@@ -353,7 +353,7 @@ func (s *GomolSuite) TestMarshalJsonStringLevelMapping(c *C) {
 	c.Check(l.IsInitialized(), Equals, true)
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
-	b, err := l.marshalJSON(ts, gomol.LEVEL_ERROR, map[string]interface{}{
+	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
@@ -370,7 +370,7 @@ func (s *GomolSuite) TestMarshalJsonStringLevelMapping(c *C) {
 func (s *GomolSuite) TestMarshalJsonNumericLevelMapping(c *C) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.LogLevelMap = map[gomol.LogLevel]interface{}{
-		gomol.LEVEL_ERROR: 1234,
+		gomol.LevelError: 1234,
 	}
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
@@ -379,7 +379,7 @@ func (s *GomolSuite) TestMarshalJsonNumericLevelMapping(c *C) {
 	c.Check(l.IsInitialized(), Equals, true)
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
-	b, err := l.marshalJSON(ts, gomol.LEVEL_ERROR, map[string]interface{}{
+	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
@@ -397,7 +397,7 @@ func (s *GomolSuite) TestLogmUninitialized(c *C) {
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
 	l, err := NewJSONLogger(cfg)
 
-	err = l.Logm(time.Now(), gomol.LEVEL_DEBUG, nil, "test")
+	err = l.Logm(time.Now(), gomol.LevelDebug, nil, "test")
 	c.Check(err, NotNil)
 	c.Check(err.Error(), Equals, "JSON logger has not been initialized")
 }
@@ -406,7 +406,7 @@ func (s *GomolSuite) TestLogmMarshalLevelError(c *C) {
 	cfg.LogLevelMap = make(map[gomol.LogLevel]interface{})
 	l, err := NewJSONLogger(cfg)
 
-	err = l.Logm(time.Now(), gomol.LEVEL_DEBUG, nil, "test")
+	err = l.Logm(time.Now(), gomol.LevelDebug, nil, "test")
 	c.Check(err, NotNil)
 	c.Check(err.Error(), Equals, "JSON logger has not been initialized")
 }
@@ -415,7 +415,7 @@ func (s *GomolSuite) TestLogmMarshalJsonError(c *C) {
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
 
-	err = l.Logm(time.Now(), gomol.LEVEL_DEBUG, map[string]interface{}{
+	err = l.Logm(time.Now(), gomol.LevelDebug, map[string]interface{}{
 		"invalid": map[int]int{
 			1: 2,
 			2: 3,
@@ -430,7 +430,7 @@ func (s *GomolSuite) TestLogmWrite(c *C) {
 	l.InitLogger()
 
 	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
-	err = l.Logm(ts, gomol.LEVEL_DEBUG, nil, "test")
+	err = l.Logm(ts, gomol.LevelDebug, nil, "test")
 	c.Check(err, IsNil)
 	conn := l.conn.(*fakeConn)
 	c.Check(conn.Written, DeepEquals, []byte("{"+
@@ -448,7 +448,7 @@ func (s *GomolSuite) TestLogmWritePartial(c *C) {
 	conn.WriteWindowSize = 10
 
 	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
-	err = l.Logm(ts, gomol.LEVEL_DEBUG, nil, "test")
+	err = l.Logm(ts, gomol.LevelDebug, nil, "test")
 	c.Check(err, IsNil)
 	c.Check(conn.Written, DeepEquals, []byte("{"+
 		"\"level\":\"debug\","+
@@ -463,7 +463,7 @@ func (s *GomolSuite) TestLogmWriteCustomDelimiter(c *C) {
 	l.InitLogger()
 
 	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
-	err = l.Logm(ts, gomol.LEVEL_DEBUG, nil, "test")
+	err = l.Logm(ts, gomol.LevelDebug, nil, "test")
 	c.Check(err, IsNil)
 	conn := l.conn.(*fakeConn)
 	c.Check(conn.Written, DeepEquals, []byte("{"+
@@ -480,7 +480,7 @@ func (s *GomolSuite) TestLogmErrorWhenAlreadyDisconnected(c *C) {
 	l.disconnect()
 
 	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
-	err = l.Logm(ts, gomol.LEVEL_DEBUG, nil, "test")
+	err = l.Logm(ts, gomol.LevelDebug, nil, "test")
 	c.Assert(err, NotNil)
 	c.Check(err.Error(), Equals, "Could not send message")
 
@@ -500,7 +500,7 @@ func (s *GomolSuite) TestLogmErrorWhenNewlyDisconnected(c *C) {
 	conn.WriteError = newFakeNetError("disconnected", false, false)
 
 	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
-	err = l.Logm(ts, gomol.LEVEL_DEBUG, nil, "test")
+	err = l.Logm(ts, gomol.LevelDebug, nil, "test")
 	c.Assert(err, NotNil)
 	c.Check(err.Error(), Equals, "Could not send message")
 
@@ -520,7 +520,7 @@ func (s *GomolSuite) TestLogmErrorOnWriteButNotDisconnected(c *C) {
 	conn.WriteError = errors.New("write error")
 
 	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
-	err = l.Logm(ts, gomol.LEVEL_DEBUG, nil, "test")
+	err = l.Logm(ts, gomol.LevelDebug, nil, "test")
 	c.Assert(err, NotNil)
 	c.Check(err.Error(), Equals, "write error")
 }
