@@ -174,16 +174,13 @@ func (s *GomolSuite) TestMarshalJsonMarshalError(c *C) {
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	attrs := map[string]interface{}{
-		"field1": "val1",
-		"field2": 2,
-		"invalid": map[int]int{
-			1: 2,
-			2: 3,
-		},
+		"field1":  "val1",
+		"field2":  2,
+		"invalid": func() string { return "i'm a function!" },
 	}
 	_, err = l.marshalJSON(ts, gomol.LevelError, attrs, "my message")
 	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "json: unsupported type: map[int]int")
+	c.Check(err.Error(), Equals, "json: unsupported type: func() string")
 }
 
 func (s *GomolSuite) TestMarshalJsonFieldPrefix(c *C) {
@@ -416,13 +413,10 @@ func (s *GomolSuite) TestLogmMarshalJsonError(c *C) {
 	l.InitLogger()
 
 	err = l.Logm(time.Now(), gomol.LevelDebug, map[string]interface{}{
-		"invalid": map[int]int{
-			1: 2,
-			2: 3,
-		},
+		"invalid": func() string { return "i'm a function!" },
 	}, "test")
 	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "json: unsupported type: map[int]int")
+	c.Check(err.Error(), Equals, "json: unsupported type: func() string")
 }
 func (s *GomolSuite) TestLogmWrite(c *C) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
