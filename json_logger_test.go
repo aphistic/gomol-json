@@ -24,7 +24,6 @@ var _ = Suite(&GomolSuite{})
 
 func (s *GomolSuite) TestDefaultLogLevelMapping(c *C) {
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
-	c.Check(cfg.LogLevelMap[gomol.LevelUnknown], Equals, "unknown")
 	c.Check(cfg.LogLevelMap[gomol.LevelDebug], Equals, "debug")
 	c.Check(cfg.LogLevelMap[gomol.LevelInfo], Equals, "info")
 	c.Check(cfg.LogLevelMap[gomol.LevelWarning], Equals, "warn")
