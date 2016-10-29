@@ -204,9 +204,20 @@ func (l *JSONLogger) ShutdownLogger() error {
 
 func (l *JSONLogger) marshalJSON(timestamp time.Time, level gomol.LogLevel, attrs map[string]interface{}, msg string) ([]byte, error) {
 	msgMap := make(map[string]interface{})
+
+	// First add base attrs
+	if l.base != nil && l.base.BaseAttrs != nil {
+		for key, val := range l.base.BaseAttrs.Attrs() {
+			if _, ok := l.unprefixedMap[key]; ok {
+				msgMap[key] = val
+			} else {
+				msgMap[l.config.FieldPrefix+key] = val
+			}
+		}
+	}
+
 	if attrs != nil {
-		for key := range attrs {
-			val := attrs[key]
+		for key, val := range attrs {
 			if _, ok := l.unprefixedMap[key]; ok {
 				msgMap[key] = val
 			} else {

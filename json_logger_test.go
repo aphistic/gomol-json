@@ -163,6 +163,43 @@ func (s *GomolSuite) TestMarshalJsonWithJsonAttrs(c *C) {
 		"}")
 }
 
+func (s *GomolSuite) TestMarshalJsonWithBaseAttrs(c *C) {
+	b := gomol.NewBase()
+	b.SetAttr("base1", 1)
+	b.SetAttr("base2", "val2")
+
+	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg.JSONAttrs = map[string]interface{}{
+		"json1": 1,
+		"json2": "val2",
+	}
+
+	l, err := NewJSONLogger(cfg)
+	c.Assert(err, IsNil)
+	c.Assert(l, NotNil)
+
+	err = b.AddLogger(l)
+	c.Assert(err, IsNil)
+
+	err = b.InitLoggers()
+	c.Assert(err, IsNil)
+	c.Check(b.IsInitialized(), Equals, true)
+	c.Check(l.IsInitialized(), Equals, true)
+
+	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
+	data, err := l.marshalJSON(ts, gomol.LevelError, nil, "my message")
+	c.Check(err, IsNil)
+	c.Check(string(data), Equals, "{"+
+		"\"base1\":1,"+
+		"\"base2\":\"val2\","+
+		"\"json1\":1,"+
+		"\"json2\":\"val2\","+
+		"\"level\":\"error\","+
+		"\"message\":\"my message\","+
+		"\"timestamp\":\"2016-08-10T13:40:13Z\""+
+		"}")
+}
+
 func (s *GomolSuite) TestMarshalJsonMarshalError(c *C) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	l, err := NewJSONLogger(cfg)
@@ -183,33 +220,44 @@ func (s *GomolSuite) TestMarshalJsonMarshalError(c *C) {
 }
 
 func (s *GomolSuite) TestMarshalJsonFieldPrefix(c *C) {
+	b := gomol.NewBase()
+	b.SetAttr("base1", 1)
+	b.SetAttr("base2", "val2")
+
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.FieldPrefix = "_"
-	cfg.UnprefixedFields = []string{"field2"}
+	cfg.UnprefixedFields = []string{"base2", "json2", "field2"}
 	cfg.JSONAttrs = map[string]interface{}{
 		"json1": 1,
 		"json2": "val2",
 	}
 	l, err := NewJSONLogger(cfg)
-	l.InitLogger()
-	c.Check(err, IsNil)
+	c.Assert(err, IsNil)
 	c.Check(l, NotNil)
+
+	b.AddLogger(l)
+
+	err = b.InitLoggers()
+	c.Assert(err, IsNil)
+	c.Check(b.IsInitialized(), Equals, true)
 	c.Check(l.IsInitialized(), Equals, true)
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
-	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
+	data, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
 	c.Check(err, IsNil)
-	c.Check(string(b), Equals, "{"+
+	c.Check(string(data), Equals, "{"+
+		"\"_base1\":1,"+
 		"\"_field1\":\"val1\","+
 		"\"_json1\":1,"+
-		"\"_json2\":\"val2\","+
 		"\"_level\":\"error\","+
 		"\"_message\":\"my message\","+
 		"\"_timestamp\":\"2016-08-10T13:40:13Z\","+
-		"\"field2\":2"+
+		"\"base2\":\"val2\","+
+		"\"field2\":2,"+
+		"\"json2\":\"val2\""+
 		"}")
 }
 
