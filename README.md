@@ -28,13 +28,13 @@ package main
 
 import (
 	"github.com/aphistic/gomol"
-	gj "github.com/aphistic/gomol-json"
 )
 
-func main() {
+// Create a new JSON logger, add it to gomol and log a few messages
+func Example() {
 	// Add a JSON Logger
-	jsonCfg := gj.NewJSONLoggerConfig("tcp://10.10.10.10:1234")
-	jsonLogger, _ := gj.NewJSONLogger(jsonCfg)
+	jsonCfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
+	jsonLogger, _ := NewJSONLogger(jsonCfg)
 	gomol.AddLogger(jsonLogger)
 
 	// Set some global attrs that will be added to all
