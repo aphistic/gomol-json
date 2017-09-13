@@ -109,8 +109,9 @@ func NewJSONLoggerConfig(hostURI string) *JSONLoggerConfig {
 		FailureQueueLength: 100,
 
 		ReconnectBackoff: backoff.NewExponentialBackoff(
-			backoff.DefaultMultiplier, backoff.DefaultRandFactor,
-			backoff.DefaultMinInterval, 1*time.Minute),
+			100*time.Millisecond,
+			time.Minute,
+		),
 	}
 }
 
