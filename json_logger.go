@@ -58,6 +58,11 @@ type JSONLoggerConfig struct {
 	// older messages will start being dropped. Defaults to 100
 	FailureQueueLength int
 
+	// Whether an active connection is required on initialization. Defaults to false.
+	// If true, the Init function will return a nil error on connection failure, but
+	// retry to connect in the background.
+	AllowDisconnectedInit bool
+
 	// The backoff strategy to use when reconnecting a connection
 	ReconnectBackoff backoff.Backoff
 }
@@ -144,6 +149,7 @@ func (l *JSONLogger) connect() error {
 
 	return nil
 }
+
 func (l *JSONLogger) disconnect() error {
 	l.connMut.Lock()
 	defer l.connMut.Unlock()
@@ -165,6 +171,14 @@ func (l *JSONLogger) SetBase(base *gomol.Base) {
 	l.base = base
 }
 
+// Healthy will return true if the logger is connected to the remote host
+func (l *JSONLogger) Healthy() bool {
+	l.connMut.RLock()
+	defer l.connMut.RUnlock()
+
+	return l.isConnected
+}
+
 // InitLogger does any initialization the logger may need before being used
 func (l *JSONLogger) InitLogger() error {
 	if len(l.config.HostURI) == 0 {
@@ -184,9 +198,13 @@ func (l *JSONLogger) InitLogger() error {
 		l.unprefixedMap[fieldName] = true
 	}
 
-	err = l.connect()
-	if err != nil {
-		return err
+	if err := l.connect(); err != nil {
+		if !l.config.AllowDisconnectedInit {
+			return err
+		}
+
+		// Reconnect in background
+		l.performReconnect()
 	}
 
 	l.isInitialized = true

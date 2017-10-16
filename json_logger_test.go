@@ -2,6 +2,7 @@ package gomoljson
 
 import (
 	"errors"
+	"net"
 	"testing"
 	"time"
 
@@ -86,6 +87,8 @@ func (s *GomolSuite) TestInitializeInvalidHostURI(t sweet.T) {
 
 func (s *GomolSuite) TestInitializeConnectFailure(t sweet.T) {
 	cfg, fd := newFakeCfg()
+	cfg.AllowDisconnectedInit = false
+
 	fd.DialError = errors.New("Dial error")
 	l, _ := NewJSONLogger(cfg)
 	Expect(l).ToNot(BeNil())
@@ -93,6 +96,36 @@ func (s *GomolSuite) TestInitializeConnectFailure(t sweet.T) {
 	err := l.InitLogger()
 	Expect(err).ToNot(BeNil())
 	Expect(err.Error()).To(Equal("Dial error"))
+}
+
+func (s *GomolSuite) TestInitializeConnectInBackground(t sweet.T) {
+	sync := make(chan struct{})
+	dials := 0
+
+	cfg, _ := newFakeCfg()
+	cfg.AllowDisconnectedInit = true
+
+	cfg.netDial = func(network string, address string) (net.Conn, error) {
+		dials++
+		if dials < 3 {
+			return nil, errors.New("Dial error")
+		}
+
+		if dials == 3 {
+			close(sync)
+		}
+
+		return newFakeConn(network, address), nil
+	}
+
+	l, _ := NewJSONLogger(cfg)
+	Expect(l).ToNot(BeNil())
+
+	err := l.InitLogger()
+	Expect(err).To(BeNil())
+	Expect(l.Healthy()).To(BeFalse())
+	<-sync
+	Eventually(l.Healthy()).Should(BeTrue())
 }
 
 func (s *GomolSuite) TestConnectWithExistingConnection(t sweet.T) {
