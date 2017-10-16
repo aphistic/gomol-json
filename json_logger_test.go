@@ -1,93 +1,98 @@
 package gomoljson
 
 import (
-	"net"
+	"errors"
 	"testing"
 	"time"
 
-	"errors"
-
 	"github.com/aphistic/gomol"
-	. "gopkg.in/check.v1"
+	"github.com/aphistic/sweet"
+	. "github.com/onsi/gomega"
 )
 
-func Test(t *testing.T) { TestingT(t) }
+func TestMain(m *testing.M) {
+	RegisterFailHandler(sweet.GomegaFail)
+
+	sweet.Run(m, func(s *sweet.S) {
+		s.AddSuite(&GomolSuite{})
+		s.AddSuite(&MockSuite{})
+	})
+}
 
 type GomolSuite struct{}
 
-func (s *GomolSuite) SetUpTest(c *C) {
+func (s *GomolSuite) SetUpTest(t sweet.T) {
 	fd := newFakeDialer()
 	netDial = fd.Dial
 }
 
-var _ = Suite(&GomolSuite{})
-
-func (s *GomolSuite) TestDefaultLogLevelMapping(c *C) {
+func (s *GomolSuite) TestDefaultLogLevelMapping(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
-	c.Check(cfg.LogLevelMap[gomol.LevelDebug], Equals, "debug")
-	c.Check(cfg.LogLevelMap[gomol.LevelInfo], Equals, "info")
-	c.Check(cfg.LogLevelMap[gomol.LevelWarning], Equals, "warn")
-	c.Check(cfg.LogLevelMap[gomol.LevelError], Equals, "error")
-	c.Check(cfg.LogLevelMap[gomol.LevelFatal], Equals, "fatal")
-	c.Check(cfg.LogLevelMap[gomol.LevelNone], Equals, "none")
+	Expect(cfg.LogLevelMap[gomol.LevelDebug]).To(Equal("debug"))
+	Expect(cfg.LogLevelMap[gomol.LevelInfo]).To(Equal("info"))
+	Expect(cfg.LogLevelMap[gomol.LevelWarning]).To(Equal("warn"))
+	Expect(cfg.LogLevelMap[gomol.LevelError]).To(Equal("error"))
+	Expect(cfg.LogLevelMap[gomol.LevelFatal]).To(Equal("fatal"))
+	Expect(cfg.LogLevelMap[gomol.LevelNone]).To(Equal("none"))
 }
 
-func (s *GomolSuite) TestSetBase(c *C) {
+func (s *GomolSuite) TestSetBase(t sweet.T) {
 	base := gomol.NewBase()
 
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
 	l, _ := NewJSONLogger(cfg)
 
-	c.Check(l.base, IsNil)
+	Expect(l.base).To(BeNil())
 	l.SetBase(base)
-	c.Check(l.base, Equals, base)
+	Expect(l.base).To(Equal(base))
 }
 
-func (s *GomolSuite) TestInitialize(c *C) {
+func (s *GomolSuite) TestInitialize(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	l, _ := NewJSONLogger(cfg)
-	c.Assert(l, NotNil)
+	Expect(l).ToNot(BeNil())
+
 	err := l.InitLogger()
-	c.Assert(err, IsNil)
-	c.Check(l.hostURL.Scheme, Equals, "tcp")
-	c.Check(l.hostURL.Host, Equals, "1.2.3.4:4321")
+	Expect(err).To(BeNil())
+	Expect(l.hostURL.Scheme).To(Equal("tcp"))
+	Expect(l.hostURL.Host).To(Equal("1.2.3.4:4321"))
 }
 
-func (s *GomolSuite) TestInitializeInvalidHostURI(c *C) {
+func (s *GomolSuite) TestInitializeInvalidHostURI(t sweet.T) {
 	cfg := NewJSONLoggerConfig("")
 	l, _ := NewJSONLogger(cfg)
-	c.Assert(l, NotNil)
+	Expect(l).ToNot(BeNil())
 
 	err := l.InitLogger()
-	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "A HostURI must be set")
+	Expect(err).ToNot(BeNil())
+	Expect(err.Error()).To(Equal("A HostURI must be set"))
 
 	cfg.HostURI = ":"
 	err = l.InitLogger()
-	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "Invalid HostURI: parse :: missing protocol scheme")
+	Expect(err).ToNot(BeNil())
+	Expect(err.Error()).To(Equal("Invalid HostURI: parse :: missing protocol scheme"))
 
 	cfg.HostURI = "tcp:"
 	err = l.InitLogger()
-	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "A port must be provided")
+	Expect(err).ToNot(BeNil())
+	Expect(err.Error()).To(Equal("A port must be provided"))
 }
 
-func (s *GomolSuite) TestInitializeConnectFailure(c *C) {
+func (s *GomolSuite) TestInitializeConnectFailure(t sweet.T) {
 	fd := newFakeDialer()
 	fd.DialError = errors.New("Dial error")
 	netDial = fd.Dial
 
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
 	l, _ := NewJSONLogger(cfg)
-	c.Assert(l, NotNil)
+	Expect(l).ToNot(BeNil())
 
 	err := l.InitLogger()
-	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "Dial error")
+	Expect(err).ToNot(BeNil())
+	Expect(err.Error()).To(Equal("Dial error"))
 }
 
-func (s *GomolSuite) TestConnectWithExistingConnection(c *C) {
+func (s *GomolSuite) TestConnectWithExistingConnection(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
 	l, _ := NewJSONLogger(cfg)
 
@@ -95,46 +100,48 @@ func (s *GomolSuite) TestConnectWithExistingConnection(c *C) {
 
 	conn := l.conn.(*fakeConn)
 	l.connect()
-	c.Check(conn, Not(Equals), l.conn)
-	c.Check(conn.HasClosed, Equals, true)
+	Expect(conn).ToNot(Equal(l.conn))
+	Expect(conn.HasClosed).To(BeTrue())
 }
 
-func (s *GomolSuite) TestShutdown(c *C) {
+func (s *GomolSuite) TestShutdown(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
 	l, _ := NewJSONLogger(cfg)
 	l.InitLogger()
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	conn := l.conn.(*fakeConn)
 	err := l.ShutdownLogger()
-	c.Assert(err, IsNil)
-	c.Check(conn.HasClosed, Equals, true)
+	Expect(err).To(BeNil())
+	Expect(conn.HasClosed).To(BeTrue())
 }
 
-func (s *GomolSuite) TestMarshalJsonDefault(c *C) {
+func (s *GomolSuite) TestMarshalJsonDefault(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
-	c.Check(err, IsNil)
-	c.Check(l, NotNil)
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(err).To(BeNil())
+	Expect(l).ToNot(BeNil())
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
-	c.Check(err, IsNil)
-	c.Check(string(b), Equals, "{"+
-		"\"field1\":\"val1\","+
-		"\"field2\":2,"+
-		"\"level\":\"error\","+
-		"\"message\":\"my message\","+
-		"\"timestamp\":\"2016-08-10T13:40:13Z\""+
-		"}")
+	Expect(err).To(BeNil())
+	Expect(string(b)).To(Equal(
+		"{" +
+			"\"field1\":\"val1\"," +
+			"\"field2\":2," +
+			"\"level\":\"error\"," +
+			"\"message\":\"my message\"," +
+			"\"timestamp\":\"2016-08-10T13:40:13Z\"" +
+			"}",
+	))
 }
 
-func (s *GomolSuite) TestMarshalJsonWithJsonAttrs(c *C) {
+func (s *GomolSuite) TestMarshalJsonWithJsonAttrs(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.JSONAttrs = map[string]interface{}{
 		"json1": 1,
@@ -142,28 +149,30 @@ func (s *GomolSuite) TestMarshalJsonWithJsonAttrs(c *C) {
 	}
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
-	c.Check(err, IsNil)
-	c.Check(l, NotNil)
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(err).To(BeNil())
+	Expect(l).ToNot(BeNil())
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
-	c.Check(err, IsNil)
-	c.Check(string(b), Equals, "{"+
-		"\"field1\":\"val1\","+
-		"\"field2\":2,"+
-		"\"json1\":1,"+
-		"\"json2\":\"val2\","+
-		"\"level\":\"error\","+
-		"\"message\":\"my message\","+
-		"\"timestamp\":\"2016-08-10T13:40:13Z\""+
-		"}")
+	Expect(err).To(BeNil())
+	Expect(string(b)).To(Equal(
+		"{" +
+			"\"field1\":\"val1\"," +
+			"\"field2\":2," +
+			"\"json1\":1," +
+			"\"json2\":\"val2\"," +
+			"\"level\":\"error\"," +
+			"\"message\":\"my message\"," +
+			"\"timestamp\":\"2016-08-10T13:40:13Z\"" +
+			"}",
+	))
 }
 
-func (s *GomolSuite) TestMarshalJsonWithBaseAttrs(c *C) {
+func (s *GomolSuite) TestMarshalJsonWithBaseAttrs(t sweet.T) {
 	b := gomol.NewBase()
 	b.SetAttr("base1", 1)
 	b.SetAttr("base2", "val2")
@@ -175,38 +184,40 @@ func (s *GomolSuite) TestMarshalJsonWithBaseAttrs(c *C) {
 	}
 
 	l, err := NewJSONLogger(cfg)
-	c.Assert(err, IsNil)
-	c.Assert(l, NotNil)
+	Expect(err).To(BeNil())
+	Expect(l).ToNot(BeNil())
 
 	err = b.AddLogger(l)
-	c.Assert(err, IsNil)
+	Expect(err).To(BeNil())
 
 	err = b.InitLoggers()
-	c.Assert(err, IsNil)
-	c.Check(b.IsInitialized(), Equals, true)
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(err).To(BeNil())
+	Expect(b.IsInitialized()).To(BeTrue())
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	data, err := l.marshalJSON(ts, gomol.LevelError, nil, "my message")
-	c.Check(err, IsNil)
-	c.Check(string(data), Equals, "{"+
-		"\"base1\":1,"+
-		"\"base2\":\"val2\","+
-		"\"json1\":1,"+
-		"\"json2\":\"val2\","+
-		"\"level\":\"error\","+
-		"\"message\":\"my message\","+
-		"\"timestamp\":\"2016-08-10T13:40:13Z\""+
-		"}")
+	Expect(err).To(BeNil())
+	Expect(string(data)).To(Equal(
+		"{" +
+			"\"base1\":1," +
+			"\"base2\":\"val2\"," +
+			"\"json1\":1," +
+			"\"json2\":\"val2\"," +
+			"\"level\":\"error\"," +
+			"\"message\":\"my message\"," +
+			"\"timestamp\":\"2016-08-10T13:40:13Z\"" +
+			"}",
+	))
 }
 
-func (s *GomolSuite) TestMarshalJsonMarshalError(c *C) {
+func (s *GomolSuite) TestMarshalJsonMarshalError(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
-	c.Check(err, IsNil)
-	c.Check(l, NotNil)
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(err).To(BeNil())
+	Expect(l).ToNot(BeNil())
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	attrs := map[string]interface{}{
@@ -215,11 +226,11 @@ func (s *GomolSuite) TestMarshalJsonMarshalError(c *C) {
 		"invalid": func() string { return "i'm a function!" },
 	}
 	_, err = l.marshalJSON(ts, gomol.LevelError, attrs, "my message")
-	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "json: unsupported type: func() string")
+	Expect(err).ToNot(BeNil())
+	Expect(err.Error()).To(Equal("json: unsupported type: func() string"))
 }
 
-func (s *GomolSuite) TestMarshalJsonFieldPrefix(c *C) {
+func (s *GomolSuite) TestMarshalJsonFieldPrefix(t sweet.T) {
 	b := gomol.NewBase()
 	b.SetAttr("base1", 1)
 	b.SetAttr("base2", "val2")
@@ -232,111 +243,119 @@ func (s *GomolSuite) TestMarshalJsonFieldPrefix(c *C) {
 		"json2": "val2",
 	}
 	l, err := NewJSONLogger(cfg)
-	c.Assert(err, IsNil)
-	c.Check(l, NotNil)
+	Expect(err).To(BeNil())
+	Expect(l).ToNot(BeNil())
 
 	b.AddLogger(l)
 
 	err = b.InitLoggers()
-	c.Assert(err, IsNil)
-	c.Check(b.IsInitialized(), Equals, true)
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(err).To(BeNil())
+	Expect(b.IsInitialized()).To(BeTrue())
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	data, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
-	c.Check(err, IsNil)
-	c.Check(string(data), Equals, "{"+
-		"\"_base1\":1,"+
-		"\"_field1\":\"val1\","+
-		"\"_json1\":1,"+
-		"\"_level\":\"error\","+
-		"\"_message\":\"my message\","+
-		"\"_timestamp\":\"2016-08-10T13:40:13Z\","+
-		"\"base2\":\"val2\","+
-		"\"field2\":2,"+
-		"\"json2\":\"val2\""+
-		"}")
+	Expect(err).To(BeNil())
+	Expect(string(data)).To(Equal(
+		"{" +
+			"\"_base1\":1," +
+			"\"_field1\":\"val1\"," +
+			"\"_json1\":1," +
+			"\"_level\":\"error\"," +
+			"\"_message\":\"my message\"," +
+			"\"_timestamp\":\"2016-08-10T13:40:13Z\"," +
+			"\"base2\":\"val2\"," +
+			"\"field2\":2," +
+			"\"json2\":\"val2\"" +
+			"}",
+	))
 }
 
-func (s *GomolSuite) TestMarshalJsonTimestampNoPrefix(c *C) {
+func (s *GomolSuite) TestMarshalJsonTimestampNoPrefix(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.FieldPrefix = "_"
 	cfg.UnprefixedFields = []string{cfg.TimestampField}
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
-	c.Check(err, IsNil)
-	c.Check(l, NotNil)
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(err).To(BeNil())
+	Expect(l).ToNot(BeNil())
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
-	c.Check(err, IsNil)
-	c.Check(string(b), Equals, "{"+
-		"\"_field1\":\"val1\","+
-		"\"_field2\":2,"+
-		"\"_level\":\"error\","+
-		"\"_message\":\"my message\","+
-		"\"timestamp\":\"2016-08-10T13:40:13Z\""+
-		"}")
+	Expect(err).To(BeNil())
+	Expect(string(b)).To(Equal(
+		"{" +
+			"\"_field1\":\"val1\"," +
+			"\"_field2\":2," +
+			"\"_level\":\"error\"," +
+			"\"_message\":\"my message\"," +
+			"\"timestamp\":\"2016-08-10T13:40:13Z\"" +
+			"}",
+	))
 }
 
-func (s *GomolSuite) TestMarshalJsonMessageNoPrefix(c *C) {
+func (s *GomolSuite) TestMarshalJsonMessageNoPrefix(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.FieldPrefix = "_"
 	cfg.UnprefixedFields = []string{cfg.MessageField}
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
-	c.Check(err, IsNil)
-	c.Check(l, NotNil)
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(err).To(BeNil())
+	Expect(l).ToNot(BeNil())
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
-	c.Check(err, IsNil)
-	c.Check(string(b), Equals, "{"+
-		"\"_field1\":\"val1\","+
-		"\"_field2\":2,"+
-		"\"_level\":\"error\","+
-		"\"_timestamp\":\"2016-08-10T13:40:13Z\","+
-		"\"message\":\"my message\""+
-		"}")
+	Expect(err).To(BeNil())
+	Expect(string(b)).To(Equal(
+		"{" +
+			"\"_field1\":\"val1\"," +
+			"\"_field2\":2," +
+			"\"_level\":\"error\"," +
+			"\"_timestamp\":\"2016-08-10T13:40:13Z\"," +
+			"\"message\":\"my message\"" +
+			"}",
+	))
 }
 
-func (s *GomolSuite) TestMarshalJsonLevelNoPrefix(c *C) {
+func (s *GomolSuite) TestMarshalJsonLevelNoPrefix(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.FieldPrefix = "_"
 	cfg.UnprefixedFields = []string{cfg.LogLevelField}
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
-	c.Check(err, IsNil)
-	c.Check(l, NotNil)
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(err).To(BeNil())
+	Expect(l).ToNot(BeNil())
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
-	c.Check(err, IsNil)
-	c.Check(string(b), Equals, "{"+
-		"\"_field1\":\"val1\","+
-		"\"_field2\":2,"+
-		"\"_message\":\"my message\","+
-		"\"_timestamp\":\"2016-08-10T13:40:13Z\","+
-		"\"level\":\"error\""+
-		"}")
+	Expect(err).To(BeNil())
+	Expect(string(b)).To(Equal(
+		"{" +
+			"\"_field1\":\"val1\"," +
+			"\"_field2\":2," +
+			"\"_message\":\"my message\"," +
+			"\"_timestamp\":\"2016-08-10T13:40:13Z\"," +
+			"\"level\":\"error\"" +
+			"}",
+	))
 }
 
-func (s *GomolSuite) TestMarshalJsonLevelNoJsonPrefix(c *C) {
+func (s *GomolSuite) TestMarshalJsonLevelNoJsonPrefix(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.FieldPrefix = "_"
 	cfg.UnprefixedFields = []string{"json1"}
@@ -346,115 +365,121 @@ func (s *GomolSuite) TestMarshalJsonLevelNoJsonPrefix(c *C) {
 	}
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
-	c.Check(err, IsNil)
-	c.Check(l, NotNil)
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(err).To(BeNil())
+	Expect(l).ToNot(BeNil())
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
-	c.Check(err, IsNil)
-	c.Check(string(b), Equals, "{"+
-		"\"_field1\":\"val1\","+
-		"\"_field2\":2,"+
-		"\"_json2\":\"val2\","+
-		"\"_level\":\"error\","+
-		"\"_message\":\"my message\","+
-		"\"_timestamp\":\"2016-08-10T13:40:13Z\","+
-		"\"json1\":1"+
-		"}")
+	Expect(err).To(BeNil())
+	Expect(string(b)).To(Equal(
+		"{" +
+			"\"_field1\":\"val1\"," +
+			"\"_field2\":2," +
+			"\"_json2\":\"val2\"," +
+			"\"_level\":\"error\"," +
+			"\"_message\":\"my message\"," +
+			"\"_timestamp\":\"2016-08-10T13:40:13Z\"," +
+			"\"json1\":1" +
+			"}",
+	))
 }
 
-func (s *GomolSuite) TestMarshalJsonMissingLevelMapping(c *C) {
+func (s *GomolSuite) TestMarshalJsonMissingLevelMapping(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.LogLevelMap = make(map[gomol.LogLevel]interface{})
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
-	c.Check(err, IsNil)
-	c.Check(l, NotNil)
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(err).To(BeNil())
+	Expect(l).ToNot(BeNil())
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	_, err = l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
-	c.Check(err, NotNil)
-	c.Check(err.Error(), Equals, "Log level error does not have a mapping.")
+	Expect(err).ToNot(BeNil())
+	Expect(err.Error()).To(Equal("Log level error does not have a mapping."))
 }
 
-func (s *GomolSuite) TestMarshalJsonStringLevelMapping(c *C) {
+func (s *GomolSuite) TestMarshalJsonStringLevelMapping(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.LogLevelMap = map[gomol.LogLevel]interface{}{
 		gomol.LevelError: "e",
 	}
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
-	c.Check(err, IsNil)
-	c.Check(l, NotNil)
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(err).To(BeNil())
+	Expect(l).ToNot(BeNil())
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
-	c.Check(err, IsNil)
-	c.Check(string(b), Equals, "{"+
-		"\"field1\":\"val1\","+
-		"\"field2\":2,"+
-		"\"level\":\"e\","+
-		"\"message\":\"my message\","+
-		"\"timestamp\":\"2016-08-10T13:40:13Z\""+
-		"}")
+	Expect(err).To(BeNil())
+	Expect(string(b)).To(Equal(
+		"{" +
+			"\"field1\":\"val1\"," +
+			"\"field2\":2," +
+			"\"level\":\"e\"," +
+			"\"message\":\"my message\"," +
+			"\"timestamp\":\"2016-08-10T13:40:13Z\"" +
+			"}",
+	))
 }
 
-func (s *GomolSuite) TestMarshalJsonNumericLevelMapping(c *C) {
+func (s *GomolSuite) TestMarshalJsonNumericLevelMapping(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.LogLevelMap = map[gomol.LogLevel]interface{}{
 		gomol.LevelError: 1234,
 	}
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
-	c.Check(err, IsNil)
-	c.Check(l, NotNil)
-	c.Check(l.IsInitialized(), Equals, true)
+	Expect(err).To(BeNil())
+	Expect(l).ToNot(BeNil())
+	Expect(l.IsInitialized()).To(BeTrue())
 
 	ts := time.Date(2016, 8, 10, 13, 40, 13, 0, time.UTC)
 	b, err := l.marshalJSON(ts, gomol.LevelError, map[string]interface{}{
 		"field1": "val1",
 		"field2": 2,
 	}, "my message")
-	c.Check(err, IsNil)
-	c.Check(string(b), Equals, "{"+
-		"\"field1\":\"val1\","+
-		"\"field2\":2,"+
-		"\"level\":1234,"+
-		"\"message\":\"my message\","+
-		"\"timestamp\":\"2016-08-10T13:40:13Z\""+
-		"}")
+	Expect(err).To(BeNil())
+	Expect(string(b)).To(Equal(
+		"{" +
+			"\"field1\":\"val1\"," +
+			"\"field2\":2," +
+			"\"level\":1234," +
+			"\"message\":\"my message\"," +
+			"\"timestamp\":\"2016-08-10T13:40:13Z\"" +
+			"}",
+	))
 }
 
-func (s *GomolSuite) TestLogmUninitialized(c *C) {
+func (s *GomolSuite) TestLogmUninitialized(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
 	l, err := NewJSONLogger(cfg)
 
 	err = l.Logm(time.Now(), gomol.LevelDebug, nil, "test")
-	c.Check(err, NotNil)
-	c.Check(err.Error(), Equals, "JSON logger has not been initialized")
+	Expect(err).ToNot(BeNil())
+	Expect(err.Error()).To(Equal("JSON logger has not been initialized"))
 }
-func (s *GomolSuite) TestLogmMarshalLevelError(c *C) {
+func (s *GomolSuite) TestLogmMarshalLevelError(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
 	cfg.LogLevelMap = make(map[gomol.LogLevel]interface{})
 	l, err := NewJSONLogger(cfg)
 
 	err = l.Logm(time.Now(), gomol.LevelDebug, nil, "test")
-	c.Check(err, NotNil)
-	c.Check(err.Error(), Equals, "JSON logger has not been initialized")
+	Expect(err).ToNot(BeNil())
+	Expect(err.Error()).To(Equal("JSON logger has not been initialized"))
 }
-func (s *GomolSuite) TestLogmMarshalJsonError(c *C) {
+func (s *GomolSuite) TestLogmMarshalJsonError(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
@@ -462,25 +487,27 @@ func (s *GomolSuite) TestLogmMarshalJsonError(c *C) {
 	err = l.Logm(time.Now(), gomol.LevelDebug, map[string]interface{}{
 		"invalid": func() string { return "i'm a function!" },
 	}, "test")
-	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "json: unsupported type: func() string")
+	Expect(err).ToNot(BeNil())
+	Expect(err.Error()).To(Equal("json: unsupported type: func() string"))
 }
-func (s *GomolSuite) TestLogmWrite(c *C) {
+func (s *GomolSuite) TestLogmWrite(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
 
 	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
 	err = l.Logm(ts, gomol.LevelDebug, nil, "test")
-	c.Check(err, IsNil)
+	Expect(err).To(BeNil())
 	conn := l.conn.(*fakeConn)
-	c.Check(conn.Written, DeepEquals, []byte("{"+
-		"\"level\":\"debug\","+
-		"\"message\":\"test\","+
-		"\"timestamp\":\"2016-08-11T10:56:33Z\""+
-		"}\n"))
+	Expect(conn.Written).To(Equal([]byte(
+		"{" +
+			"\"level\":\"debug\"," +
+			"\"message\":\"test\"," +
+			"\"timestamp\":\"2016-08-11T10:56:33Z\"" +
+			"}\n",
+	)))
 }
-func (s *GomolSuite) TestLogmWritePartial(c *C) {
+func (s *GomolSuite) TestLogmWritePartial(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
@@ -490,14 +517,16 @@ func (s *GomolSuite) TestLogmWritePartial(c *C) {
 
 	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
 	err = l.Logm(ts, gomol.LevelDebug, nil, "test")
-	c.Check(err, IsNil)
-	c.Check(conn.Written, DeepEquals, []byte("{"+
-		"\"level\":\"debug\","+
-		"\"message\":\"test\","+
-		"\"timestamp\":\"2016-08-11T10:56:33Z\""+
-		"}\n"))
+	Expect(err).To(BeNil())
+	Expect(conn.Written).To(Equal([]byte(
+		"{" +
+			"\"level\":\"debug\"," +
+			"\"message\":\"test\"," +
+			"\"timestamp\":\"2016-08-11T10:56:33Z\"" +
+			"}\n",
+	)))
 }
-func (s *GomolSuite) TestLogmWriteCustomDelimiter(c *C) {
+func (s *GomolSuite) TestLogmWriteCustomDelimiter(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.MessageDelimiter = []byte("DELIMITER")
 	l, err := NewJSONLogger(cfg)
@@ -505,15 +534,17 @@ func (s *GomolSuite) TestLogmWriteCustomDelimiter(c *C) {
 
 	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
 	err = l.Logm(ts, gomol.LevelDebug, nil, "test")
-	c.Check(err, IsNil)
+	Expect(err).To(BeNil())
 	conn := l.conn.(*fakeConn)
-	c.Check(conn.Written, DeepEquals, []byte("{"+
-		"\"level\":\"debug\","+
-		"\"message\":\"test\","+
-		"\"timestamp\":\"2016-08-11T10:56:33Z\""+
-		"}DELIMITER"))
+	Expect(conn.Written).To(Equal([]byte(
+		"{" +
+			"\"level\":\"debug\"," +
+			"\"message\":\"test\"," +
+			"\"timestamp\":\"2016-08-11T10:56:33Z\"" +
+			"}DELIMITER",
+	)))
 }
-func (s *GomolSuite) TestLogmErrorWhenAlreadyDisconnected(c *C) {
+func (s *GomolSuite) TestLogmErrorWhenAlreadyDisconnected(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
@@ -522,17 +553,19 @@ func (s *GomolSuite) TestLogmErrorWhenAlreadyDisconnected(c *C) {
 
 	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
 	err = l.Logm(ts, gomol.LevelDebug, nil, "test")
-	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "Could not send message")
+	Expect(err).ToNot(BeNil())
+	Expect(err.Error()).To(Equal("Could not send message"))
 
-	c.Assert(len(l.failedQueue), Equals, 1)
-	c.Check(l.failedQueue[0], DeepEquals, []byte("{"+
-		"\"level\":\"debug\","+
-		"\"message\":\"test\","+
-		"\"timestamp\":\"2016-08-11T10:56:33Z\""+
-		"}\n"))
+	Expect(len(l.failedQueue)).To(Equal(1))
+	Expect(l.failedQueue[0]).To(Equal([]byte(
+		"{" +
+			"\"level\":\"debug\"," +
+			"\"message\":\"test\"," +
+			"\"timestamp\":\"2016-08-11T10:56:33Z\"" +
+			"}\n",
+	)))
 }
-func (s *GomolSuite) TestLogmErrorWhenNewlyDisconnected(c *C) {
+func (s *GomolSuite) TestLogmErrorWhenNewlyDisconnected(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
@@ -542,17 +575,19 @@ func (s *GomolSuite) TestLogmErrorWhenNewlyDisconnected(c *C) {
 
 	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
 	err = l.Logm(ts, gomol.LevelDebug, nil, "test")
-	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "Could not send message")
+	Expect(err).ToNot(BeNil())
+	Expect(err.Error()).To(Equal("Could not send message"))
 
-	c.Assert(len(l.failedQueue), Equals, 1)
-	c.Check(l.failedQueue[0], DeepEquals, []byte("{"+
-		"\"level\":\"debug\","+
-		"\"message\":\"test\","+
-		"\"timestamp\":\"2016-08-11T10:56:33Z\""+
-		"}\n"))
+	Expect(len(l.failedQueue)).To(Equal(1))
+	Expect(l.failedQueue[0]).To(Equal([]byte(
+		"{" +
+			"\"level\":\"debug\"," +
+			"\"message\":\"test\"," +
+			"\"timestamp\":\"2016-08-11T10:56:33Z\"" +
+			"}\n",
+	)))
 }
-func (s *GomolSuite) TestLogmErrorOnWriteButNotDisconnected(c *C) {
+func (s *GomolSuite) TestLogmErrorOnWriteButNotDisconnected(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
@@ -562,73 +597,73 @@ func (s *GomolSuite) TestLogmErrorOnWriteButNotDisconnected(c *C) {
 
 	ts := time.Date(2016, 8, 11, 10, 56, 33, 0, time.UTC)
 	err = l.Logm(ts, gomol.LevelDebug, nil, "test")
-	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "write error")
+	Expect(err).ToNot(BeNil())
+	Expect(err.Error()).To(Equal("write error"))
 }
 
-func (s *GomolSuite) TestQueueFailure(c *C) {
+func (s *GomolSuite) TestQueueFailure(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.FailureQueueLength = 2
 	l, _ := NewJSONLogger(cfg)
 	l.InitLogger()
 
-	c.Assert(l.failedQueue, NotNil)
-	c.Check(len(l.failedQueue), Equals, 0)
+	Expect(l.failedQueue).ToNot(BeNil())
+	Expect(len(l.failedQueue)).To(Equal(0))
 	l.queueFailure([]byte{0x00})
-	c.Check(len(l.failedQueue), Equals, 1)
+	Expect(len(l.failedQueue)).To(Equal(1))
 	l.queueFailure([]byte{0x01})
-	c.Check(len(l.failedQueue), Equals, 2)
+	Expect(len(l.failedQueue)).To(Equal(2))
 	l.queueFailure([]byte{0x02})
-	c.Check(len(l.failedQueue), Equals, 2)
-	c.Check(l.failedQueue, DeepEquals, [][]byte{{0x01}, {0x02}})
+	Expect(len(l.failedQueue)).To(Equal(2))
+	Expect(l.failedQueue).To(Equal([][]byte{{0x01}, {0x02}}))
 }
 
-func (s *GomolSuite) TestFailureLen(c *C) {
+func (s *GomolSuite) TestFailureLen(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	cfg.FailureQueueLength = 2
 	l, _ := NewJSONLogger(cfg)
 	l.InitLogger()
 
-	c.Check(l.failureLen(), Equals, 0)
+	Expect(l.failureLen()).To(Equal(0))
 	l.queueFailure([]byte{0x00})
-	c.Check(l.failureLen(), Equals, 1)
+	Expect(l.failureLen()).To(Equal(1))
 	l.queueFailure([]byte{0x01})
-	c.Check(l.failureLen(), Equals, 2)
+	Expect(l.failureLen()).To(Equal(2))
 	l.queueFailure([]byte{0x02})
-	c.Check(l.failureLen(), Equals, 2)
+	Expect(l.failureLen()).To(Equal(2))
 }
 
-func (s *GomolSuite) TestDequeueFailure(c *C) {
+func (s *GomolSuite) TestDequeueFailure(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	l, _ := NewJSONLogger(cfg)
 	l.InitLogger()
 
-	c.Assert(l.failedQueue, NotNil)
+	Expect(l.failedQueue).ToNot(BeNil())
 
 	l.queueFailure([]byte{0x00})
 	l.queueFailure([]byte{0x01})
 	l.queueFailure([]byte{0x02})
 
 	item := l.dequeueFailure()
-	c.Check(item, DeepEquals, []byte{0x00})
-	c.Check(len(l.failedQueue), Equals, 2)
-	c.Check(l.failedQueue, DeepEquals, [][]byte{{0x01}, {0x02}})
+	Expect(item).To(Equal([]byte{0x00}))
+	Expect(len(l.failedQueue)).To(Equal(2))
+	Expect(l.failedQueue).To(Equal([][]byte{{0x01}, {0x02}}))
 
 	item = l.dequeueFailure()
-	c.Check(item, DeepEquals, []byte{0x01})
-	c.Check(len(l.failedQueue), Equals, 1)
-	c.Check(l.failedQueue, DeepEquals, [][]byte{{0x02}})
+	Expect(item).To(Equal([]byte{0x01}))
+	Expect(len(l.failedQueue)).To(Equal(1))
+	Expect(l.failedQueue).To(Equal([][]byte{{0x02}}))
 
 	item = l.dequeueFailure()
-	c.Check(item, DeepEquals, []byte{0x02})
-	c.Check(len(l.failedQueue), Equals, 0)
-	c.Check(l.failedQueue, DeepEquals, [][]byte{})
+	Expect(item).To(Equal([]byte{0x02}))
+	Expect(len(l.failedQueue)).To(Equal(0))
+	Expect(l.failedQueue).To(Equal([][]byte{}))
 
 	item = l.dequeueFailure()
-	c.Check(item, IsNil)
+	Expect(item).To(BeNil())
 }
 
-func (s *GomolSuite) TestTryReconnect(c *C) {
+func (s *GomolSuite) TestTryReconnect(t sweet.T) {
 	fd := newFakeDialer()
 	fd.DialError = errors.New("dial error")
 	fd.DialErrorOn = 2
@@ -644,18 +679,13 @@ func (s *GomolSuite) TestTryReconnect(c *C) {
 
 	l.tryReconnect(rcChan)
 
-	c.Check(testBackoff.NextCalledCount, Equals, 1)
-	c.Check(testBackoff.ResetCalledCount, Equals, 1)
+	Expect(testBackoff.NextCalledCount).To(Equal(1))
+	Expect(testBackoff.ResetCalledCount).To(Equal(1))
 
-	select {
-	case chanRes := <-rcChan:
-		c.Check(chanRes, Equals, true)
-	default:
-		c.Fail()
-	}
+	Eventually(rcChan).Should(Receive(Equal(true)))
 }
 
-func (s *GomolSuite) TestTrySendFailures(c *C) {
+func (s *GomolSuite) TestTrySendFailures(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	l, _ := NewJSONLogger(cfg)
 	l.InitLogger()
@@ -689,267 +719,5 @@ func (s *GomolSuite) TestTrySendFailures(c *C) {
 	}
 
 	conn = l.conn.(*fakeConn)
-	c.Check(conn.Written, DeepEquals, []byte{0x01, 0x00})
-}
-
-// ======================
-// Fake impls for testing
-// ======================
-
-func (s *GomolSuite) TestFakeDialerErrorOn(c *C) {
-	fd := newFakeDialer()
-	fd.DialError = errors.New("Dial error")
-	fd.DialErrorOn = 2
-
-	_, err := fd.Dial("tcp", "10.10.10.10:1234")
-	c.Check(err, IsNil)
-
-	_, err = fd.Dial("tcp", "10.10.10.10:1234")
-	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "Dial error")
-}
-
-func (s *GomolSuite) TestFakeConn(c *C) {
-	f := newFakeConn("tcp", "1.2.3.4:4321")
-	c.Assert(f.Written, NotNil)
-	c.Check(f.Written, HasLen, 0)
-
-	amt, err := f.Write([]byte{0, 1, 2, 3, 4})
-	c.Check(err, IsNil)
-	c.Check(amt, Equals, 5)
-	c.Check(f.Written, DeepEquals, []byte{0, 1, 2, 3, 4})
-
-	c.Check(f.localAddr, DeepEquals, &fakeAddr{
-		AddrNetwork: "tcp",
-		Address:     "10.10.10.10:1234",
-	})
-	c.Check(f.remoteAddr, DeepEquals, &fakeAddr{
-		AddrNetwork: "tcp",
-		Address:     "1.2.3.4:4321",
-	})
-}
-
-func (s *GomolSuite) TestFakeConnWriteWindowSize(c *C) {
-	f := newFakeConn("tcp", "1.2.3.4:4321")
-	c.Assert(f.Written, NotNil)
-	c.Check(f.Written, HasLen, 0)
-
-	f.WriteWindowSize = 2
-
-	amt, err := f.Write([]byte{0, 1, 2, 3, 4})
-	c.Check(err, IsNil)
-	c.Check(amt, Equals, 2)
-	c.Check(f.Written, DeepEquals, []byte{0, 1})
-}
-
-func (s *GomolSuite) TestFakeConnWriteError(c *C) {
-	f := newFakeConn("tcp", "1.2.3.4:4321")
-	c.Assert(f.Written, NotNil)
-	c.Check(f.Written, HasLen, 0)
-
-	f.WriteError = errors.New("write error")
-
-	_, err := f.Write([]byte{0, 1, 2, 3, 4})
-	c.Check(err, NotNil)
-	c.Check(err.Error(), Equals, "write error")
-}
-func (s *GomolSuite) TestFakeConnWriteErrorOn(c *C) {
-	f := newFakeConn("tcp", "1.2.3.4:4321")
-	c.Assert(f.Written, NotNil)
-	c.Check(f.Written, HasLen, 0)
-
-	f.WriteError = errors.New("write error")
-	f.WriteErrorOn = 2
-
-	_, err := f.Write([]byte{0, 1, 2, 3, 4})
-	c.Check(err, IsNil)
-
-	_, err = f.Write([]byte{0, 1, 2, 3, 4})
-	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "write error")
-}
-func (s *GomolSuite) TestFakeConnWriteSuccessAfterError(c *C) {
-	f := newFakeConn("tcp", "1.2.3.4:4321")
-	c.Assert(f.Written, NotNil)
-	c.Check(f.Written, HasLen, 0)
-
-	f.WriteError = errors.New("write error")
-	f.WriteSuccessAfterError = true
-
-	_, err := f.Write([]byte{0, 1, 2, 3, 4})
-	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, "write error")
-
-	_, err = f.Write([]byte{0, 1, 2, 3, 4})
-	c.Check(err, IsNil)
-}
-
-func (s *GomolSuite) TestFakeBackoff(c *C) {
-	b := &fakeBackoff{}
-
-	b.Reset()
-	b.Reset()
-	c.Check(b.ResetCalledCount, Equals, 2)
-
-	b.NextInterval()
-	b.NextInterval()
-	b.NextInterval()
-	c.Check(b.NextCalledCount, Equals, 3)
-}
-
-type fakeDialer struct {
-	DialError   error
-	DialErrorOn int
-
-	dialsSinceError int
-}
-
-func newFakeDialer() *fakeDialer {
-	return &fakeDialer{}
-}
-
-func (d *fakeDialer) Dial(network string, address string) (net.Conn, error) {
-	if d.DialError != nil {
-		d.dialsSinceError++
-		if d.dialsSinceError >= d.DialErrorOn {
-			d.dialsSinceError = 0
-			return nil, d.DialError
-		}
-	}
-
-	return newFakeConn(network, address), nil
-}
-
-type fakeBackoff struct {
-	NextCalledCount  int
-	ResetCalledCount int
-}
-
-func (b *fakeBackoff) Reset() {
-	b.ResetCalledCount++
-}
-
-func (b *fakeBackoff) NextInterval() time.Duration {
-	b.NextCalledCount++
-	return time.Millisecond * 0
-}
-
-type fakeAddr struct {
-	AddrNetwork string
-	Address     string
-}
-
-func (a *fakeAddr) Network() string {
-	return a.AddrNetwork
-}
-func (a *fakeAddr) String() string {
-	return a.Address
-}
-
-type fakeNetError struct {
-	ErrMsg       string
-	ErrTimeout   bool
-	ErrTemporary bool
-}
-
-func newFakeNetError(msg string, timeout bool, temporary bool) *fakeNetError {
-	return &fakeNetError{
-		ErrMsg:       msg,
-		ErrTimeout:   timeout,
-		ErrTemporary: temporary,
-	}
-}
-
-func (e *fakeNetError) Timeout() bool {
-	return e.ErrTimeout
-}
-func (e *fakeNetError) Temporary() bool {
-	return e.ErrTemporary
-}
-func (e *fakeNetError) Error() string {
-	return e.ErrMsg
-}
-
-type fakeConn struct {
-	Written                []byte
-	WriteWindowSize        int
-	WriteError             error
-	WriteErrorOn           int // Number of writes to return the error after
-	WriteSuccessAfterError bool
-
-	HasClosed bool
-
-	localAddr  net.Addr
-	remoteAddr net.Addr
-
-	writesSinceError int
-}
-
-func newFakeConn(network string, address string) *fakeConn {
-	return &fakeConn{
-		Written:   make([]byte, 0),
-		HasClosed: false,
-
-		localAddr: &fakeAddr{
-			AddrNetwork: network,
-			Address:     "10.10.10.10:1234",
-		},
-		remoteAddr: &fakeAddr{
-			AddrNetwork: network,
-			Address:     address,
-		},
-	}
-}
-
-func (c *fakeConn) Read(b []byte) (n int, err error) {
-	return 0, nil
-}
-
-func (c *fakeConn) Write(b []byte) (n int, err error) {
-	if c.WriteError != nil {
-		c.writesSinceError++
-		if c.writesSinceError >= c.WriteErrorOn {
-			c.writesSinceError = 0
-
-			n = 0
-			err = c.WriteError
-			if c.WriteSuccessAfterError {
-				c.WriteError = nil
-			}
-
-			return
-		}
-	}
-
-	if c.WriteWindowSize > 0 {
-		c.Written = append(c.Written, b[:c.WriteWindowSize]...)
-		return c.WriteWindowSize, nil
-	}
-	c.Written = append(c.Written, b...)
-	return len(b), nil
-}
-
-func (c *fakeConn) Close() error {
-	c.HasClosed = true
-	return nil
-}
-
-func (c *fakeConn) LocalAddr() net.Addr {
-	return c.localAddr
-}
-
-func (c *fakeConn) RemoteAddr() net.Addr {
-	return c.remoteAddr
-}
-
-func (c *fakeConn) SetDeadline(t time.Time) error {
-	return nil
-}
-
-func (c *fakeConn) SetReadDeadline(t time.Time) error {
-	return nil
-}
-
-func (c *fakeConn) SetWriteDeadline(t time.Time) error {
-	return nil
+	Expect(conn.Written).To(Equal([]byte{0x01, 0x00}))
 }
