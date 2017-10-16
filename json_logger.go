@@ -58,10 +58,10 @@ type JSONLoggerConfig struct {
 	// older messages will start being dropped. Defaults to 100
 	FailureQueueLength int
 
-	// Whether an active connection is required on initialization. Defaults to true.
-	// If false, the Init function will return a nil error on connection failure, but
+	// Whether an active connection is required on initialization. Defaults to false.
+	// If true, the Init function will return a nil error on connection failure, but
 	// retry to connect in the background.
-	RequireConnectionOnInit bool
+	AllowDisconnectedInit bool
 
 	// The backoff strategy to use when reconnecting a connection
 	ReconnectBackoff backoff.Backoff
@@ -113,8 +113,6 @@ func NewJSONLoggerConfig(hostURI string) *JSONLoggerConfig {
 		JSONAttrs: make(map[string]interface{}),
 
 		FailureQueueLength: 100,
-
-		RequireConnectionOnInit: true,
 
 		ReconnectBackoff: backoff.NewExponentialBackoff(
 			100*time.Millisecond,
@@ -175,6 +173,9 @@ func (l *JSONLogger) SetBase(base *gomol.Base) {
 
 // Healthy will return true if the logger is connected to the remote host
 func (l *JSONLogger) Healthy() bool {
+	l.connMut.RLock()
+	defer l.connMut.RUnlock()
+
 	return l.isConnected
 }
 
@@ -198,7 +199,7 @@ func (l *JSONLogger) InitLogger() error {
 	}
 
 	if err := l.connect(); err != nil {
-		if l.config.RequireConnectionOnInit {
+		if !l.config.AllowDisconnectedInit {
 			return err
 		}
 

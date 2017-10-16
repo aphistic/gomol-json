@@ -87,6 +87,8 @@ func (s *GomolSuite) TestInitializeInvalidHostURI(t sweet.T) {
 
 func (s *GomolSuite) TestInitializeConnectFailure(t sweet.T) {
 	cfg, fd := newFakeCfg()
+	cfg.AllowDisconnectedInit = false
+
 	fd.DialError = errors.New("Dial error")
 	l, _ := NewJSONLogger(cfg)
 	Expect(l).ToNot(BeNil())
@@ -101,7 +103,7 @@ func (s *GomolSuite) TestInitializeConnectInBackground(t sweet.T) {
 	dials := 0
 
 	cfg, _ := newFakeCfg()
-	cfg.RequireConnectionOnInit = false
+	cfg.AllowDisconnectedInit = true
 
 	cfg.netDial = func(network string, address string) (net.Conn, error) {
 		dials++
