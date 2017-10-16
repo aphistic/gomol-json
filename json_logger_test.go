@@ -99,7 +99,11 @@ func (s *GomolSuite) TestInitializeConnectFailure(t sweet.T) {
 func (s *GomolSuite) TestInitializeConnectInBackground(t sweet.T) {
 	sync := make(chan struct{})
 	dials := 0
-	netDial = func(network string, address string) (net.Conn, error) {
+
+	cfg, _ := newFakeCfg()
+	cfg.RequireConnectionOnInit = false
+
+	cfg.netDial = func(network string, address string) (net.Conn, error) {
 		dials++
 		if dials < 3 {
 			return nil, errors.New("Dial error")
@@ -112,8 +116,6 @@ func (s *GomolSuite) TestInitializeConnectInBackground(t sweet.T) {
 		return newFakeConn(network, address), nil
 	}
 
-	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
-	cfg.RequireConnectionOnInit = false
 	l, _ := NewJSONLogger(cfg)
 	Expect(l).ToNot(BeNil())
 
