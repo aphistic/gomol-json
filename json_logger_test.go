@@ -16,6 +16,7 @@ func TestMain(m *testing.M) {
 
 	sweet.Run(m, func(s *sweet.S) {
 		s.AddSuite(&GomolSuite{})
+		s.AddSuite(&IssueSuite{})
 		s.AddSuite(&MockSuite{})
 	})
 }
