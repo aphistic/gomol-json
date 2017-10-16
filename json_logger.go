@@ -313,10 +313,20 @@ func (l *JSONLogger) write(msgBytes []byte) error {
 	msgLen := len(msgBytes)
 	written := 0
 	for {
+		l.connMut.RLock()
+		if !l.isConnected || l.conn == nil {
+			l.connMut.RUnlock()
+			return ErrDisconnected
+		}
+
+		// Try writing because we at least think we're connected
 		n, err := l.conn.Write(msgBytes[written:])
+		l.connMut.RUnlock()
+
 		if err != nil {
 			return err
 		}
+
 		written += n
 		if written >= msgLen {
 			// Should never be > but check that way just in case so we don't
