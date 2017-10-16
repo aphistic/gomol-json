@@ -118,7 +118,7 @@ func (s *GomolSuite) TestInitializeConnectInBackground(t sweet.T) {
 	Expect(err).To(BeNil())
 	Expect(l.Healthy()).To(BeFalse())
 	<-sync
-	Expect(l.Healthy()).To(BeTrue())
+	Eventually(l.Healthy()).Should(BeTrue())
 }
 
 func (s *GomolSuite) TestConnectWithExistingConnection(t sweet.T) {
