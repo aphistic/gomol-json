@@ -8,7 +8,7 @@ import (
 type IssueSuite struct{}
 
 func (s *IssueSuite) TestIssue4(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	l, err := NewJSONLogger(cfg)
 	Expect(err).To(BeNil())
 	l.InitLogger()

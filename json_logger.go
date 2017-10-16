@@ -20,14 +20,13 @@ import (
 	"github.com/efritz/backoff"
 )
 
-// Allow changing the Dial function that's being called so it can
-// be swapped out for testing
-var netDial dialFunc = net.Dial
-
 type dialFunc func(network string, address string) (net.Conn, error)
 
 // JSONLoggerConfig is the configuration for a JSONLogger
 type JSONLoggerConfig struct {
+	// netDial allows the function for dialing a net.Conn to be overridden for testing
+	netDial dialFunc
+
 	// A URI for the host to connect to in the format: protocol://host:port. Ex: tcp://10.10.10.10:1234
 	HostURI string
 
@@ -77,13 +76,15 @@ type JSONLogger struct {
 	conn        net.Conn
 	isConnected bool
 
-	failedQueue [][]byte
 	failedMut   sync.RWMutex
+	failedQueue [][]byte
 }
 
 // NewJSONLoggerConfig creates a new configuration with default settings
 func NewJSONLoggerConfig(hostURI string) *JSONLoggerConfig {
 	return &JSONLoggerConfig{
+		netDial: net.Dial,
+
 		HostURI: hostURI,
 
 		MessageDelimiter: []byte("\n"),
@@ -117,6 +118,10 @@ func NewJSONLoggerConfig(hostURI string) *JSONLoggerConfig {
 
 // NewJSONLogger creates a new logger with the provided configuration
 func NewJSONLogger(config *JSONLoggerConfig) (*JSONLogger, error) {
+	if config == nil {
+		return nil, errors.New("config cannot be nil")
+	}
+
 	l := &JSONLogger{
 		config:      config,
 		failedQueue: make([][]byte, 0),
@@ -130,7 +135,7 @@ func (l *JSONLogger) connect() error {
 	l.connMut.Lock()
 	defer l.connMut.Unlock()
 
-	conn, err := netDial(l.hostURL.Scheme, l.hostURL.Host)
+	conn, err := l.config.netDial(l.hostURL.Scheme, l.hostURL.Host)
 	if err != nil {
 		return err
 	}
@@ -386,6 +391,17 @@ func (l *JSONLogger) queueFailure(msgBytes []byte) {
 	} else {
 		l.failedQueue = append(l.failedQueue, msgBytes)
 	}
+}
+
+func (l *JSONLogger) failure(idx int) ([]byte, int) {
+	l.failedMut.RLock()
+	defer l.failedMut.RUnlock()
+
+	if len(l.failedQueue) > idx {
+		return l.failedQueue[idx], len(l.failedQueue)
+	}
+
+	return nil, len(l.failedQueue)
 }
 
 func (l *JSONLogger) failureLen() int {

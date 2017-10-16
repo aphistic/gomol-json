@@ -20,12 +20,15 @@ func TestMain(m *testing.M) {
 	})
 }
 
-type GomolSuite struct{}
-
-func (s *GomolSuite) SetUpTest(t sweet.T) {
+func newFakeCfg() (*JSONLoggerConfig, *fakeDialer) {
 	fd := newFakeDialer()
-	netDial = fd.Dial
+	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg.netDial = fd.Dial
+
+	return cfg, fd
 }
+
+type GomolSuite struct{}
 
 func (s *GomolSuite) TestDefaultLogLevelMapping(t sweet.T) {
 	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
@@ -49,12 +52,14 @@ func (s *GomolSuite) TestSetBase(t sweet.T) {
 }
 
 func (s *GomolSuite) TestInitialize(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	l, _ := NewJSONLogger(cfg)
 	Expect(l).ToNot(BeNil())
 
 	err := l.InitLogger()
 	Expect(err).To(BeNil())
+	defer l.ShutdownLogger()
+
 	Expect(l.hostURL.Scheme).To(Equal("tcp"))
 	Expect(l.hostURL.Host).To(Equal("1.2.3.4:4321"))
 }
@@ -80,11 +85,8 @@ func (s *GomolSuite) TestInitializeInvalidHostURI(t sweet.T) {
 }
 
 func (s *GomolSuite) TestInitializeConnectFailure(t sweet.T) {
-	fd := newFakeDialer()
+	cfg, fd := newFakeCfg()
 	fd.DialError = errors.New("Dial error")
-	netDial = fd.Dial
-
-	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
 	l, _ := NewJSONLogger(cfg)
 	Expect(l).ToNot(BeNil())
 
@@ -94,7 +96,7 @@ func (s *GomolSuite) TestInitializeConnectFailure(t sweet.T) {
 }
 
 func (s *GomolSuite) TestConnectWithExistingConnection(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
+	cfg, _ := newFakeCfg()
 	l, _ := NewJSONLogger(cfg)
 
 	l.InitLogger()
@@ -103,10 +105,12 @@ func (s *GomolSuite) TestConnectWithExistingConnection(t sweet.T) {
 	l.connect()
 	Expect(conn).ToNot(Equal(l.conn))
 	Expect(conn.HasClosed).To(BeTrue())
+
+	l.ShutdownLogger()
 }
 
 func (s *GomolSuite) TestShutdown(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
+	cfg, _ := newFakeCfg()
 	l, _ := NewJSONLogger(cfg)
 	l.InitLogger()
 	Expect(l.IsInitialized()).To(BeTrue())
@@ -118,7 +122,7 @@ func (s *GomolSuite) TestShutdown(t sweet.T) {
 }
 
 func (s *GomolSuite) TestMarshalJsonDefault(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
 	Expect(err).To(BeNil())
@@ -143,7 +147,7 @@ func (s *GomolSuite) TestMarshalJsonDefault(t sweet.T) {
 }
 
 func (s *GomolSuite) TestMarshalJsonWithJsonAttrs(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.JSONAttrs = map[string]interface{}{
 		"json1": 1,
 		"json2": "val2",
@@ -178,7 +182,7 @@ func (s *GomolSuite) TestMarshalJsonWithBaseAttrs(t sweet.T) {
 	b.SetAttr("base1", 1)
 	b.SetAttr("base2", "val2")
 
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.JSONAttrs = map[string]interface{}{
 		"json1": 1,
 		"json2": "val2",
@@ -213,7 +217,7 @@ func (s *GomolSuite) TestMarshalJsonWithBaseAttrs(t sweet.T) {
 }
 
 func (s *GomolSuite) TestMarshalJsonMarshalError(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
 	Expect(err).To(BeNil())
@@ -236,7 +240,7 @@ func (s *GomolSuite) TestMarshalJsonFieldPrefix(t sweet.T) {
 	b.SetAttr("base1", 1)
 	b.SetAttr("base2", "val2")
 
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.FieldPrefix = "_"
 	cfg.UnprefixedFields = []string{"base2", "json2", "field2"}
 	cfg.JSONAttrs = map[string]interface{}{
@@ -276,7 +280,7 @@ func (s *GomolSuite) TestMarshalJsonFieldPrefix(t sweet.T) {
 }
 
 func (s *GomolSuite) TestMarshalJsonTimestampNoPrefix(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.FieldPrefix = "_"
 	cfg.UnprefixedFields = []string{cfg.TimestampField}
 	l, err := NewJSONLogger(cfg)
@@ -303,7 +307,7 @@ func (s *GomolSuite) TestMarshalJsonTimestampNoPrefix(t sweet.T) {
 }
 
 func (s *GomolSuite) TestMarshalJsonMessageNoPrefix(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.FieldPrefix = "_"
 	cfg.UnprefixedFields = []string{cfg.MessageField}
 	l, err := NewJSONLogger(cfg)
@@ -330,7 +334,7 @@ func (s *GomolSuite) TestMarshalJsonMessageNoPrefix(t sweet.T) {
 }
 
 func (s *GomolSuite) TestMarshalJsonLevelNoPrefix(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.FieldPrefix = "_"
 	cfg.UnprefixedFields = []string{cfg.LogLevelField}
 	l, err := NewJSONLogger(cfg)
@@ -357,7 +361,7 @@ func (s *GomolSuite) TestMarshalJsonLevelNoPrefix(t sweet.T) {
 }
 
 func (s *GomolSuite) TestMarshalJsonLevelNoJsonPrefix(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.FieldPrefix = "_"
 	cfg.UnprefixedFields = []string{"json1"}
 	cfg.JSONAttrs = map[string]interface{}{
@@ -390,7 +394,7 @@ func (s *GomolSuite) TestMarshalJsonLevelNoJsonPrefix(t sweet.T) {
 }
 
 func (s *GomolSuite) TestMarshalJsonMissingLevelMapping(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.LogLevelMap = make(map[gomol.LogLevel]interface{})
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
@@ -408,7 +412,7 @@ func (s *GomolSuite) TestMarshalJsonMissingLevelMapping(t sweet.T) {
 }
 
 func (s *GomolSuite) TestMarshalJsonStringLevelMapping(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.LogLevelMap = map[gomol.LogLevel]interface{}{
 		gomol.LevelError: "e",
 	}
@@ -436,7 +440,7 @@ func (s *GomolSuite) TestMarshalJsonStringLevelMapping(t sweet.T) {
 }
 
 func (s *GomolSuite) TestMarshalJsonNumericLevelMapping(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.LogLevelMap = map[gomol.LogLevel]interface{}{
 		gomol.LevelError: 1234,
 	}
@@ -464,7 +468,7 @@ func (s *GomolSuite) TestMarshalJsonNumericLevelMapping(t sweet.T) {
 }
 
 func (s *GomolSuite) TestLogmUninitialized(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
+	cfg, _ := newFakeCfg()
 	l, err := NewJSONLogger(cfg)
 
 	err = l.Logm(time.Now(), gomol.LevelDebug, nil, "test")
@@ -472,7 +476,7 @@ func (s *GomolSuite) TestLogmUninitialized(t sweet.T) {
 	Expect(err.Error()).To(Equal("JSON logger has not been initialized"))
 }
 func (s *GomolSuite) TestLogmMarshalLevelError(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
+	cfg, _ := newFakeCfg()
 	cfg.LogLevelMap = make(map[gomol.LogLevel]interface{})
 	l, err := NewJSONLogger(cfg)
 
@@ -481,7 +485,7 @@ func (s *GomolSuite) TestLogmMarshalLevelError(t sweet.T) {
 	Expect(err.Error()).To(Equal("JSON logger has not been initialized"))
 }
 func (s *GomolSuite) TestLogmMarshalJsonError(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
+	cfg, _ := newFakeCfg()
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
 
@@ -492,7 +496,7 @@ func (s *GomolSuite) TestLogmMarshalJsonError(t sweet.T) {
 	Expect(err.Error()).To(Equal("json: unsupported type: func() string"))
 }
 func (s *GomolSuite) TestLogmWrite(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
 
@@ -509,7 +513,7 @@ func (s *GomolSuite) TestLogmWrite(t sweet.T) {
 	)))
 }
 func (s *GomolSuite) TestLogmWritePartial(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
 
@@ -528,7 +532,7 @@ func (s *GomolSuite) TestLogmWritePartial(t sweet.T) {
 	)))
 }
 func (s *GomolSuite) TestLogmWriteCustomDelimiter(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.MessageDelimiter = []byte("DELIMITER")
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
@@ -546,7 +550,7 @@ func (s *GomolSuite) TestLogmWriteCustomDelimiter(t sweet.T) {
 	)))
 }
 func (s *GomolSuite) TestLogmErrorWhenAlreadyDisconnected(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
 
@@ -557,8 +561,9 @@ func (s *GomolSuite) TestLogmErrorWhenAlreadyDisconnected(t sweet.T) {
 	Expect(err).ToNot(BeNil())
 	Expect(err.Error()).To(Equal("Could not send message"))
 
-	Expect(len(l.failedQueue)).To(Equal(1))
-	Expect(l.failedQueue[0]).To(Equal([]byte(
+	msg, failLen := l.failure(0)
+	Expect(failLen).To(Equal(1))
+	Expect(msg).To(Equal([]byte(
 		"{" +
 			"\"level\":\"debug\"," +
 			"\"message\":\"test\"," +
@@ -567,7 +572,7 @@ func (s *GomolSuite) TestLogmErrorWhenAlreadyDisconnected(t sweet.T) {
 	)))
 }
 func (s *GomolSuite) TestLogmErrorWhenNewlyDisconnected(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
 
@@ -579,8 +584,9 @@ func (s *GomolSuite) TestLogmErrorWhenNewlyDisconnected(t sweet.T) {
 	Expect(err).ToNot(BeNil())
 	Expect(err.Error()).To(Equal("Could not send message"))
 
-	Expect(len(l.failedQueue)).To(Equal(1))
-	Expect(l.failedQueue[0]).To(Equal([]byte(
+	msg, failLen := l.failure(0)
+	Expect(failLen).To(Equal(1))
+	Expect(msg).To(Equal([]byte(
 		"{" +
 			"\"level\":\"debug\"," +
 			"\"message\":\"test\"," +
@@ -589,7 +595,7 @@ func (s *GomolSuite) TestLogmErrorWhenNewlyDisconnected(t sweet.T) {
 	)))
 }
 func (s *GomolSuite) TestLogmErrorOnWriteButNotDisconnected(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	l, err := NewJSONLogger(cfg)
 	l.InitLogger()
 
@@ -603,7 +609,7 @@ func (s *GomolSuite) TestLogmErrorOnWriteButNotDisconnected(t sweet.T) {
 }
 
 func (s *GomolSuite) TestQueueFailure(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.FailureQueueLength = 2
 	l, _ := NewJSONLogger(cfg)
 	l.InitLogger()
@@ -620,7 +626,7 @@ func (s *GomolSuite) TestQueueFailure(t sweet.T) {
 }
 
 func (s *GomolSuite) TestFailureLen(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	cfg.FailureQueueLength = 2
 	l, _ := NewJSONLogger(cfg)
 	l.InitLogger()
@@ -635,11 +641,12 @@ func (s *GomolSuite) TestFailureLen(t sweet.T) {
 }
 
 func (s *GomolSuite) TestDequeueFailure(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	l, _ := NewJSONLogger(cfg)
-	l.InitLogger()
+	err := l.InitLogger()
+	Expect(err).To(BeNil())
 
-	Expect(l.failedQueue).ToNot(BeNil())
+	Expect(l.failureLen()).To(Equal(0))
 
 	l.queueFailure([]byte{0x00})
 	l.queueFailure([]byte{0x01})
@@ -665,12 +672,10 @@ func (s *GomolSuite) TestDequeueFailure(t sweet.T) {
 }
 
 func (s *GomolSuite) TestTryReconnect(t sweet.T) {
-	fd := newFakeDialer()
+	cfg, fd := newFakeCfg()
 	fd.DialError = errors.New("dial error")
 	fd.DialErrorOn = 2
-	netDial = fd.Dial
 
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
 	testBackoff := &fakeBackoff{}
 	cfg.ReconnectBackoff = testBackoff
 	l, _ := NewJSONLogger(cfg)
@@ -687,9 +692,10 @@ func (s *GomolSuite) TestTryReconnect(t sweet.T) {
 }
 
 func (s *GomolSuite) TestTrySendFailures(t sweet.T) {
-	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
+	cfg, _ := newFakeCfg()
 	l, _ := NewJSONLogger(cfg)
 	l.InitLogger()
+	defer l.ShutdownLogger()
 
 	conn := l.conn.(*fakeConn)
 	conn.WriteError = newFakeNetError("net err", false, false)
