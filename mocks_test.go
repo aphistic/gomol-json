@@ -20,7 +20,7 @@ func newFakeDialer() *fakeDialer {
 	return &fakeDialer{}
 }
 
-func (d *fakeDialer) Dial(network string, address string) (net.Conn, error) {
+func (d *fakeDialer) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
 	if d.DialError != nil {
 		d.dialsSinceError++
 		if d.dialsSinceError >= d.DialErrorOn {
@@ -29,7 +29,7 @@ func (d *fakeDialer) Dial(network string, address string) (net.Conn, error) {
 		}
 	}
 
-	return newFakeConn(network, address), nil
+	return newFakeConn(network, address, timeout), nil
 }
 
 type fakeBackoff struct {
@@ -93,11 +93,12 @@ type fakeConn struct {
 
 	localAddr  net.Addr
 	remoteAddr net.Addr
+	timeout    time.Duration
 
 	writesSinceError int
 }
 
-func newFakeConn(network string, address string) *fakeConn {
+func newFakeConn(network, address string, timeout time.Duration) *fakeConn {
 	return &fakeConn{
 		Written:   make([]byte, 0),
 		HasClosed: false,
@@ -110,6 +111,7 @@ func newFakeConn(network string, address string) *fakeConn {
 			AddrNetwork: network,
 			Address:     address,
 		},
+		timeout: timeout,
 	}
 }
 
@@ -173,16 +175,16 @@ func (s *MockSuite) TestFakeDialerErrorOn(t sweet.T) {
 	fd.DialError = errors.New("Dial error")
 	fd.DialErrorOn = 2
 
-	_, err := fd.Dial("tcp", "10.10.10.10:1234")
+	_, err := fd.DialTimeout("tcp", "10.10.10.10:1234", 60*time.Second)
 	Expect(err).To(BeNil())
 
-	_, err = fd.Dial("tcp", "10.10.10.10:1234")
+	_, err = fd.DialTimeout("tcp", "10.10.10.10:1234", 60*time.Second)
 	Expect(err).ToNot(BeNil())
 	Expect(err.Error()).To(Equal("Dial error"))
 }
 
 func (s *MockSuite) TestFakeConn(t sweet.T) {
-	f := newFakeConn("tcp", "1.2.3.4:4321")
+	f := newFakeConn("tcp", "1.2.3.4:4321", 60*time.Second)
 	Expect(f.Written).ToNot(BeNil())
 	Expect(f.Written).To(HaveLen(0))
 
@@ -202,7 +204,7 @@ func (s *MockSuite) TestFakeConn(t sweet.T) {
 }
 
 func (s *MockSuite) TestFakeConnWriteWindowSize(t sweet.T) {
-	f := newFakeConn("tcp", "1.2.3.4:4321")
+	f := newFakeConn("tcp", "1.2.3.4:4321", 60*time.Second)
 	Expect(f.Written).ToNot(BeNil())
 	Expect(f.Written).To(HaveLen(0))
 
@@ -215,7 +217,7 @@ func (s *MockSuite) TestFakeConnWriteWindowSize(t sweet.T) {
 }
 
 func (s *MockSuite) TestFakeConnWriteError(t sweet.T) {
-	f := newFakeConn("tcp", "1.2.3.4:4321")
+	f := newFakeConn("tcp", "1.2.3.4:4321", 60*time.Second)
 	Expect(f.Written).ToNot(BeNil())
 	Expect(f.Written).To(HaveLen(0))
 
@@ -226,7 +228,7 @@ func (s *MockSuite) TestFakeConnWriteError(t sweet.T) {
 	Expect(err.Error()).To(Equal("write error"))
 }
 func (s *MockSuite) TestFakeConnWriteErrorOn(t sweet.T) {
-	f := newFakeConn("tcp", "1.2.3.4:4321")
+	f := newFakeConn("tcp", "1.2.3.4:4321", 60*time.Second)
 	Expect(f.Written).ToNot(BeNil())
 	Expect(f.Written).To(HaveLen(0))
 
@@ -241,7 +243,7 @@ func (s *MockSuite) TestFakeConnWriteErrorOn(t sweet.T) {
 	Expect(err.Error()).To(Equal("write error"))
 }
 func (s *MockSuite) TestFakeConnWriteSuccessAfterError(t sweet.T) {
-	f := newFakeConn("tcp", "1.2.3.4:4321")
+	f := newFakeConn("tcp", "1.2.3.4:4321", 60*time.Second)
 	Expect(f.Written).ToNot(BeNil())
 	Expect(f.Written).To(HaveLen(0))
 

@@ -20,7 +20,16 @@ import (
 	"github.com/efritz/backoff"
 )
 
-type dialFunc func(network string, address string) (net.Conn, error)
+type dialFunc func(network, address string, timeout time.Duration) (net.Conn, error)
+
+type LoggerOption func(cfg *JSONLoggerConfig)
+
+// WithDialTimeout sets the amount of time the logger will try to connect to the host before timing out
+func WithDialTimeout(timeout time.Duration) LoggerOption {
+	return func(cfg *JSONLoggerConfig) {
+		cfg.DialTimeout = timeout
+	}
+}
 
 // JSONLoggerConfig is the configuration for a JSONLogger
 type JSONLoggerConfig struct {
@@ -29,6 +38,9 @@ type JSONLoggerConfig struct {
 
 	// A URI for the host to connect to in the format: protocol://host:port. Ex: tcp://10.10.10.10:1234
 	HostURI string
+
+	// DialTimeout is the amount of time the logger will try to connect to the host before timing out
+	DialTimeout time.Duration
 
 	// The delimiter to use at the end of every message sent. Defaults to '\n'
 	MessageDelimiter []byte
@@ -88,14 +100,15 @@ type JSONLogger struct {
 // NewJSONLoggerConfig creates a new configuration with default settings
 func NewJSONLoggerConfig(hostURI string) *JSONLoggerConfig {
 	return &JSONLoggerConfig{
-		netDial: net.Dial,
+		netDial: net.DialTimeout,
 
-		HostURI: hostURI,
+		HostURI:     hostURI,
+		DialTimeout: 60 * time.Second,
 
 		MessageDelimiter: []byte("\n"),
 
 		FieldPrefix:      "",
-		UnprefixedFields: make([]string, 0),
+		UnprefixedFields: []string{},
 
 		LogLevelField:  "level",
 		MessageField:   "message",
@@ -110,7 +123,7 @@ func NewJSONLoggerConfig(hostURI string) *JSONLoggerConfig {
 			gomol.LevelNone:    gomol.LevelNone.String(),
 		},
 
-		JSONAttrs: make(map[string]interface{}),
+		JSONAttrs: map[string]interface{}{},
 
 		FailureQueueLength: 100,
 
@@ -140,7 +153,7 @@ func (l *JSONLogger) connect() error {
 	l.connMut.Lock()
 	defer l.connMut.Unlock()
 
-	conn, err := l.config.netDial(l.hostURL.Scheme, l.hostURL.Host)
+	conn, err := l.config.netDial(l.hostURL.Scheme, l.hostURL.Host, l.config.DialTimeout)
 	if err != nil {
 		return err
 	}

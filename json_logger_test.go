@@ -8,6 +8,7 @@ import (
 
 	"github.com/aphistic/gomol"
 	"github.com/aphistic/sweet"
+	"github.com/efritz/backoff"
 	. "github.com/onsi/gomega"
 )
 
@@ -15,6 +16,7 @@ func TestMain(m *testing.M) {
 	RegisterFailHandler(sweet.GomegaFail)
 
 	sweet.Run(m, func(s *sweet.S) {
+		s.AddSuite(&ConfigSuite{})
 		s.AddSuite(&GomolSuite{})
 		s.AddSuite(&IssueSuite{})
 		s.AddSuite(&MockSuite{})
@@ -24,9 +26,51 @@ func TestMain(m *testing.M) {
 func newFakeCfg() (*JSONLoggerConfig, *fakeDialer) {
 	fd := newFakeDialer()
 	cfg := NewJSONLoggerConfig("tcp://1.2.3.4:4321")
-	cfg.netDial = fd.Dial
+	cfg.netDial = fd.DialTimeout
 
 	return cfg, fd
+}
+
+type ConfigSuite struct{}
+
+func (s *ConfigSuite) TestDefaultConfig(t sweet.T) {
+	cfg := NewJSONLoggerConfig("tcp://10.10.10.10:1234")
+
+	// Comparing functions doesn't work so we need to get rid of that value
+	// before comparing.
+	cfg.netDial = nil
+
+	Expect(cfg).To(Equal(&JSONLoggerConfig{
+		HostURI:     "tcp://10.10.10.10:1234",
+		DialTimeout: 60 * time.Second,
+
+		MessageDelimiter: []byte("\n"),
+
+		FieldPrefix:      "",
+		UnprefixedFields: []string{},
+
+		LogLevelField:  "level",
+		MessageField:   "message",
+		TimestampField: "timestamp",
+
+		LogLevelMap: map[gomol.LogLevel]interface{}{
+			gomol.LevelDebug:   gomol.LevelDebug.String(),
+			gomol.LevelInfo:    gomol.LevelInfo.String(),
+			gomol.LevelWarning: gomol.LevelWarning.String(),
+			gomol.LevelError:   gomol.LevelError.String(),
+			gomol.LevelFatal:   gomol.LevelFatal.String(),
+			gomol.LevelNone:    gomol.LevelNone.String(),
+		},
+
+		JSONAttrs: map[string]interface{}{},
+
+		FailureQueueLength: 100,
+
+		ReconnectBackoff: backoff.NewExponentialBackoff(
+			100*time.Millisecond,
+			time.Minute,
+		),
+	}))
 }
 
 type GomolSuite struct{}
@@ -105,7 +149,7 @@ func (s *GomolSuite) TestInitializeConnectInBackground(t sweet.T) {
 	cfg, _ := newFakeCfg()
 	cfg.AllowDisconnectedInit = true
 
-	cfg.netDial = func(network string, address string) (net.Conn, error) {
+	cfg.netDial = func(network, address string, timeout time.Duration) (net.Conn, error) {
 		dials++
 		if dials < 3 {
 			return nil, errors.New("Dial error")
@@ -115,7 +159,7 @@ func (s *GomolSuite) TestInitializeConnectInBackground(t sweet.T) {
 			close(sync)
 		}
 
-		return newFakeConn(network, address), nil
+		return newFakeConn(network, address, timeout), nil
 	}
 
 	l, _ := NewJSONLogger(cfg)
