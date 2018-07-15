@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/aphistic/sweet"
+	"github.com/efritz/backoff"
 	. "github.com/onsi/gomega"
 )
 
@@ -44,6 +45,13 @@ func (b *fakeBackoff) Reset() {
 func (b *fakeBackoff) NextInterval() time.Duration {
 	b.NextCalledCount++
 	return time.Millisecond * 0
+}
+
+func (b *fakeBackoff) Clone() backoff.Backoff {
+	return &fakeBackoff{
+		NextCalledCount:  b.NextCalledCount,
+		ResetCalledCount: b.ResetCalledCount,
+	}
 }
 
 type fakeAddr struct {
